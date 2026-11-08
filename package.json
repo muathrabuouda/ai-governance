@@ -1,0 +1,44 @@
+{
+  "name": "@muathrabuouda/ai-governance",
+  "version": "1.00.00",
+  "description": "AI-Native Software Engineering & Verification Platform for Autonomous Agents and Developers",
+  "type": "module",
+  "bin": {
+    "governance": "./bin/governance.mjs",
+    "governance": "./bin/governance.mjs"
+  },
+  "homepage": "https://github.com/muathrabuouda/ai-governance",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muathrabuouda/ai-governance.git"
+  },
+  "bugs": {
+    "url": "https://github.com/muathrabuouda/ai-governance/issues"
+  },
+  "scripts": {
+    "governance": "node ./bin/governance.mjs",
+    "governance": "node ./bin/governance.mjs",
+    "format": "prettier --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"tests/**/*.test.ts\" && npm --prefix golden-project test",
+    "test:root": "tsx --test \"tests/**/*.test.ts\"",
+    "test:golden": "npm --prefix golden-project test",
+    "i18n": "npm --prefix golden-project run i18n",
+    "check": "npm run format && npm run lint && npm run typecheck && npm test && npm run deps && npm run secrets",
+    "deps": "node scripts/check-deps.mjs",
+    "mutate": "node golden-project/scripts/mutate.mjs",
+    "secrets": "node scripts/scan-secrets.mjs",
+    "bench": "node golden-project/scripts/bench.mjs"
+  },
+  "author": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "eslint": "9.17.0",
+    "prettier": "3.4.2",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2",
+    "typescript-eslint": "8.18.1"
+  }
+}
