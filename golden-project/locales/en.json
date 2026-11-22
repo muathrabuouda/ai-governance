@@ -1,0 +1,8 @@
+{
+  "booking.slots.count": "{count, plural, =0 {No free slots} one {# free slot} other {# free slots}}",
+  "booking.cancel.done": "Your appointment on {date} was cancelled",
+  "booking.cancel.late": "Your appointment was cancelled late (less than 24 hours before)",
+  "booking.error.notCancellable": "This appointment cannot be cancelled",
+  "booking.error.notOwner": "This appointment is not yours",
+  "booking.book.requested": "We received your booking request and will confirm it soon"
+}

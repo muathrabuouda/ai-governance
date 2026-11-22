@@ -1,0 +1,20 @@
+# An agent reviews every pull request and comments. It never pushes, merges or approves.
+# Check input names against the action's README before using: they change between versions.
+name: agent-review
+on:
+  pull_request:
+    types: [opened, synchronize]
+permissions:
+  contents: read
+  pull-requests: write # to comment; nothing else
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run AI Agent Reviewer
+        run: |
+          echo "Executing AI Agent Reviewer from .agents/agents/reviewer.md"
+          # In CI, execute automated code review against docs/standards/definition-of-done.md
+          npm run check

@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test)",
+      "Bash(npm run check)",
+      "Bash(npm run i18n)",
+      "Bash(git diff *)",
+      "Bash(git status)"
+    ],
+    "ask": ["Bash(git push *)", "Bash(npm install *)", "Bash(git commit *)"],
+    "deny": ["Read(./.env)", "Read(./.env.*)", "Read(./secrets/**)", "Bash(curl *)", "Bash(rm -rf *)"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "node .agents/hooks/protect-tests.mjs" }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npm test --silent >/dev/null 2>&1 || { echo 'Tests are failing: fix them before you finish.' >&2; exit 2; }"
+          }
+        ]
+      }
+    ]
+  }
+}

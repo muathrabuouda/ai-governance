@@ -1,0 +1,8 @@
+{
+  "booking.slots.count": "{count, plural, zero {لا توجد فترات متاحة} one {فترة متاحة واحدة} two {فترتان متاحتان} few {# فترات متاحة} many {# فترةً متاحة} other {# فترة متاحة}}",
+  "booking.cancel.done": "أُلغي موعدك يوم {date}",
+  "booking.cancel.late": "أُلغي موعدك متأخرًا، أي قبل أقل من ٢٤ ساعة",
+  "booking.error.notCancellable": "لا يمكن إلغاء هذا الموعد",
+  "booking.error.notOwner": "هذا الموعد ليس لك",
+  "booking.book.requested": "تم استلام طلب حجزك، وسنؤكده قريبًا"
+}

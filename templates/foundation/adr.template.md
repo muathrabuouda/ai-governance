@@ -1,0 +1,25 @@
+# ADR-{{NUMBER}}: {{TITLE}}
+
+Status: {{STATUS}} · {{DATE}} · Owner: {{OWNER}}
+
+## Context
+
+{{PROBLEM_CONTEXT_AND_FORCES}}
+
+## Options considered
+
+1. {{OPTION_1}}
+2. {{OPTION_2}}
+3. {{OPTION_3}}
+
+## Decision
+
+{{DECISION_STATEMENT}}
+
+## Consequences
+
+- {{POSITIVE_CONSEQUENCE_1}}
+- {{POSITIVE_CONSEQUENCE_2}}
+
+* {{NEGATIVE_OR_MITIGATED_CONSEQUENCE_1}}
+* {{NEGATIVE_OR_MITIGATED_CONSEQUENCE_2}}

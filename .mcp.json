@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "mawid-stories": { "type": "stdio", "command": "node", "args": ["mcp/stories-server.mjs"] }
+  }
+}

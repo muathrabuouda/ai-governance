@@ -1,0 +1,20 @@
+{
+  "name": "@muathrabuouda/golden-project",
+  "version": "1.00.00",
+  "description": "Living Reference Implementation demonstrating all 13 AI Software Engineering Phases",
+  "type": "module",
+  "scripts": {
+    "test": "tsx --test \"tests/**/*.test.ts\"",
+    "i18n": "node scripts/check-i18n.mjs",
+    "mutate": "node scripts/mutate.mjs",
+    "bench": "tsx scripts/bench.mjs",
+    "story": "node scripts/story.mjs"
+  },
+  "author": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2"
+  }
+}

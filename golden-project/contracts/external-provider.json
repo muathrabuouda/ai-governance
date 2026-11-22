@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExternalBoundaryContract",
+  "description": "Standard schema for external HTTP adapter boundaries",
+  "type": "object",
+  "required": ["id", "timestamp", "payload"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique transaction or message identifier"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

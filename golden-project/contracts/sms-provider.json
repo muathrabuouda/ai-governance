@@ -1,0 +1,23 @@
+{
+  "provider": "Example SMS gateway (the contract we agreed with the provider; examples copied from their docs)",
+  "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "headers": {
+      "authorization": "Bearer <api key>",
+      "content-type": "application/json",
+      "idempotency-key": "<unique per message>"
+    },
+    "body": {
+      "required": ["to", "text"],
+      "to": "E.164 phone number, e.g. +970599123456",
+      "text": "UTF-8, at most 670 characters"
+    }
+  },
+  "responses": {
+    "202": { "body": { "id": "msg_8f2c" }, "meaning": "accepted for delivery" },
+    "400": { "body": { "error": "invalid_number" }, "meaning": "our mistake: do not retry" },
+    "429": { "headers": { "retry-after": "2" }, "meaning": "rate limited: retry after the given seconds" },
+    "503": { "meaning": "provider down: retry with backoff" }
+  }
+}
