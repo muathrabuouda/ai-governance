@@ -1,9 +1,9 @@
 {
   "version": "1.0.0",
   "verdict": "REQUIRES_REVIEW",
-  "summary": "2 gate(s) completed with warnings or require review: Static Analysis & Linting, Automated Test Suite",
-  "timestamp": "2026-11-26T18:56:07.176Z",
-  "durationMs": 2235,
+  "summary": "1 gate(s) completed with warnings or require review: Static Analysis & Linting",
+  "timestamp": "2026-11-26T19:42:41.943Z",
+  "durationMs": 16799,
   "environment": {
     "platform": "win32",
     "nodeVersion": "v24.18.0",
@@ -13,12 +13,15 @@
     "isGit": true,
     "userName": "Muath R Abu Ouda",
     "userEmail": "muathrabuouda@hotmail.com",
-    "commitSha": "4f48568dc0269d63feeabd9c19520beb9ef2590f",
-    "treeHash": "0000000000000000000000000000000000000000",
-    "stateHeadAnchor": "31108d6cb8713053cd2f5d06723dcb6720546f2e6094d2bb506ad60ef452df74"
+    "commitSha": "80aa2333c206824042a366f56c09e4b4dd36978c",
+    "treeHash": "9f20a0c8364e48d659392c8acb7899eb24543f72",
+    "signatureStatus": "N",
+    "signerName": "",
+    "signerKey": "",
+    "stateHeadAnchor": "a759a422394172864be688aee525547c3b6f02c35897503bb8061ecd4de741aa"
   },
   "policy": {
-    "profile": "governance-engine",
+    "profile": "standard",
     "failOnWarning": false
   },
   "stacks": [
@@ -36,7 +39,7 @@
       "status": "PASSED",
       "passed": true,
       "blocking": false,
-      "message": "[PASS] Specification & Criteria Lock passed"
+      "message": "Acceptance Criteria integrity intact (no tampering detected)"
     },
     {
       "key": "threat_modeling",
@@ -45,7 +48,7 @@
       "status": "PASSED",
       "passed": true,
       "blocking": false,
-      "message": "[PASS] Threat Model Coverage passed"
+      "message": "Threat model coverage verified for active stories"
     },
     {
       "key": "secrets",
@@ -54,7 +57,7 @@
       "status": "PASSED",
       "passed": true,
       "blocking": false,
-      "message": "Secrets scan failed"
+      "message": "No secret leaks detected"
     },
     {
       "key": "dependencies",
@@ -63,7 +66,7 @@
       "status": "PASSED",
       "passed": true,
       "blocking": false,
-      "message": "Dependencies verification failed"
+      "message": "All dependencies pinned and verified"
     },
     {
       "key": "git_audit",
@@ -72,7 +75,7 @@
       "status": "PASSED",
       "passed": true,
       "blocking": false,
-      "message": "Git commit standards audit failed"
+      "message": "Git commit conventions and history valid"
     },
     {
       "key": "formatting",
@@ -96,10 +99,10 @@
       "key": "test_suite",
       "name": "Automated Test Suite",
       "required": true,
-      "status": "SKIPPED",
+      "status": "PASSED",
       "passed": true,
       "blocking": false,
-      "message": "[WARN] Automated Test Suite is not configured: No test runner configured in active stack (Node.js / TypeScript: node_modules missing (run npm ci / npm install))"
+      "message": "Test Suite (Node.js / TypeScript) passed"
     },
     {
       "key": "design_system",
@@ -108,8 +111,8 @@
       "status": "PASSED",
       "passed": true,
       "blocking": false,
-      "message": "Design system token audit failed"
+      "message": "Design system tokens compliant"
     }
   ],
-  "signature": "4eca1ec08119763210e3470188692ac86d6d908326efa208b0efcd9bbd47a473"
+  "signature": "48d184caa8c21ad09aec0f16281f35dd46a740259fad80502021e76360f85842"
 }

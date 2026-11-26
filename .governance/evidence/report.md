@@ -1,18 +1,19 @@
 # Governance Verification Report
 
 > **Verdict:** **[VERDICT: REQUIRES REVIEW]**  
-> **Summary:** 2 gate(s) completed with warnings or require review: Static Analysis & Linting, Automated Test Suite  
-> **Timestamp:** 2026-11-26T18:56:07.176Z (2235ms)  
-> **Cryptographic Signature:** `4eca1ec08119763210e3470188692ac86d6d908326efa208b0efcd9bbd47a473`
+> **Summary:** 1 gate(s) completed with warnings or require review: Static Analysis & Linting  
+> **Timestamp:** 2026-11-26T19:42:41.943Z (16799ms)  
+> **Cryptographic Signature:** `48d184caa8c21ad09aec0f16281f35dd46a740259fad80502021e76360f85842`
 
 ---
 
 ## Attestation & Provenance
 
 - **Committer:** Muath R Abu Ouda <muathrabuouda@hotmail.com>
-- **Git Commit:** `4f48568dc0` (Tree: `0000000000`)
-- **State Head Anchor:** `31108d6cb8713053...`
-- **Policy Profile:** `governance-engine` (Fail on warning: false)
+- **Git Commit:** `80aa2333c2` (Tree: `9f20a0c836`)
+- **Commit Signature:** Unsigned
+- **State Head Anchor:** `a759a42239417286...`
+- **Policy Profile:** `standard` (Fail on warning: false)
 
 ## Detected Engineering Stacks
 
@@ -24,15 +25,15 @@
 
 | Gate | Requirement | Status | Diagnostics & Proof |
 | :--- | :--- | :--- | :--- |
-| [PASS] Specification & Criteria Lock | Required | PASSED | [PASS] Specification & Criteria Lock passed |
-| [PASS] Threat Model Coverage | Required | PASSED | [PASS] Threat Model Coverage passed |
-| [PASS] Secret Leaks & Token Scanning | Required | PASSED | Secrets scan failed |
-| [PASS] Dependency Version Pinning & Approval | Required | PASSED | Dependencies verification failed |
-| [PASS] Conventional Commit & Git Hygiene | Required | PASSED | Git commit standards audit failed |
-| [PASS] Code Formatting | Optional | SKIPPED | [INFO] Code Formatting skipped: No project code formatter configured |
-| [PASS] Static Analysis & Linting | Optional | SKIPPED | [WARN] Static Analysis & Linting is not configured: No project linter configured |
-| [PASS] Automated Test Suite | Required | SKIPPED | [WARN] Automated Test Suite is not configured: No test runner configured in active stack (Node.js / TypeScript: node_modules missing (run npm ci / npm install)) |
-| [PASS] UI Design Tokens & System Compliance | Optional | PASSED | Design system token audit failed |
+| [PASS] Specification & Criteria Lock | Required | PASSED | Acceptance Criteria integrity intact (no tampering detected) |
+| [PASS] Threat Model Coverage | Required | PASSED | Threat model coverage verified for active stories |
+| [PASS] Secret Leaks & Token Scanning | Required | PASSED | No secret leaks detected |
+| [PASS] Dependency Version Pinning & Approval | Required | PASSED | All dependencies pinned and verified |
+| [PASS] Conventional Commit & Git Hygiene | Required | PASSED | Git commit conventions and history valid |
+| [SKIP] Code Formatting | Optional | SKIPPED | [INFO] Code Formatting skipped: No project code formatter configured |
+| [SKIP] Static Analysis & Linting | Optional | SKIPPED | [WARN] Static Analysis & Linting is not configured: No project linter configured |
+| [PASS] Automated Test Suite | Required | PASSED | Test Suite (Node.js / TypeScript) passed |
+| [PASS] UI Design Tokens & System Compliance | Optional | PASSED | Design system tokens compliant |
 
 ---
 
