@@ -1,14 +1,24 @@
-# Threat model — story 2: book a slot (one page, 20 minutes, before implementation)
+# Threat Model: Story 2 (Specification Locking & State Guardian)
 
-What we protect: patient phone numbers, who booked which doctor (health data), slot availability.
+> **Threat Model Standard:** STRIDE Analysis for Specification Integrity & Audit Ledger.
 
-| Threat (STRIDE)        | How it could happen here                                | Control                                                       | Test or check                       |
-| ---------------------- | ------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------- |
-| Spoofing               | Someone books in another patient's name                 | patientId comes from the session, never from the request body | API test: body patientId is ignored |
-| Tampering              | Client sends a slotId for another doctor or a past time | bookSlot reads startsAt from the database; InPast             | ac tests + boundaries.test.ts       |
-| Repudiation            | "I never booked that"                                   | Structured log line per booking, no phone number in logs      | log.test.ts: phone is redacted      |
-| Information disclosure | Error or log leaks a phone number                       | Logger redacts phone numbers; errors are codes, not data      | log.test.ts                         |
-| Denial of service      | A script books every slot                               | Rate limit per patient; max 3 active bookings per patient     | open: story needed                  |
-| Elevation of privilege | Patient calls the reception "confirm" endpoint          | Role check in one place (authorization module)                | open: story 3 tests                 |
+---
 
-Questions for the agent-written code review: Is every input validated at the boundary? Is every query parameterised? Does any log or error include personal data?
+## 1. Scope & Assets
+
+- **Asset 1:** Acceptance criteria definitions in `docs/foundation/02-spec.md`.
+- **Asset 2:** Cryptographic audit log and locked hashes in `.governance/state.json`.
+- **Asset 3:** Git tree hash and Git Notes anchor (`refs/notes/governance`).
+
+---
+
+## 2. STRIDE Analysis & Mitigations
+
+| Threat Category | Potential Attack Vector | Platform Mitigation |
+| :--- | :--- | :--- |
+| **Spoofing** | Attacker sets fake `git config user.name` to impersonate an authorized approver. | `authorized-approvers.json` supports email and GPG/SSH key fingerprint validation. |
+| **Tampering** | AI agent alters criteria table row or modifies `.governance/state.json`. | Full markdown table hashing detects any cell change; backward SHA-256 chain detects state edits; agent contract blocks write access to `.governance/state.json`. |
+| **Repudiation** | Engineer denies approving a specification. | Audit log records timestamp, committer SHA, tree hash, and optional commit signature attestation. |
+| **Information Disclosure** | Hardcoded secrets or tokens leaked in governance state. | Stage 3 secrets scan scans all committed files and state files before allowing approval. |
+| **Denial of Service** | Corrupted state file causing pipeline crashes. | Schema validation and graceful degradation with informative diagnostic error messages. |
+| **Elevation of Privilege** | Agent grants itself approver permissions. | Agent contract forbids modifications to `.governance/` and `authorized-approvers.json`. |

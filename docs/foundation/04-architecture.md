@@ -1,44 +1,50 @@
-# Architecture: Mawid (Clinic Booking)
+# Architecture: AI Governance Platform
 
-> **Governance Foundation Document 04:** Architecture Drivers, C4 Topology, and Module Boundaries.
+> **Governance Foundation Document 04:** Architecture Drivers, Subsystem Boundaries & Topology.
 
 ---
 
 ## 1. Quality Attributes Driving Architectural Decisions
 
-| Quality Attribute          | Requirement Target                | Architectural Implication                                                               |
-| :------------------------- | :-------------------------------- | :-------------------------------------------------------------------------------------- |
-| **Availability**           | NFR-2: 99.5% uptime               | Simple single-process deployment, daily automated backups, health check endpoints.      |
-| **Privacy & Security**     | NFR-3: Access isolation           | Centralized authorization policy guard, structured audit logs for patient data access.  |
-| **Operational Simplicity** | Small 2-person team & single host | Modular monolith architecture (single deployable unit with strict internal boundaries). |
+| Quality Attribute | Requirement Target | Architectural Implication |
+| :--- | :--- | :--- |
+| **Deterministic Integrity** | 100% tamper detection | SHA-256 backward hash chain with external Git tree & Notes anchoring. |
+| **Multi-Stack Portability** | Zero binary dependencies | Pure ES Modules (Node.js built-ins: `crypto`, `child_process`, `fs`). |
+| **Execution Performance** | Under 5 seconds locally | Lazy subprocess spawning, pre-flight executable checks, zero heavy dependencies. |
+| **Truthful Evidence** | Zero false-positive passes | Strict 5-state gate taxonomy (`PASSED`, `FAILED`, `SKIPPED`, `NOT_CONFIGURED`, `REQUIRES_REVIEW`). |
 
 ---
 
-## 2. Architecture Decisions
-
-- **ADR-0001:** Adopt a Modular Monolith architecture to minimize distributed systems complexity.
-
----
-
-## 3. System Context & Container Topology
+## 2. Component Topology
 
 ```mermaid
-flowchart LR
-  P(["Patient"]) --> W
-  R(["Receptionist"]) --> W
-  subgraph S["Mawid System"]
-    W["Web App (SPA)"] -->|JSON/HTTPS| A["Booking API (Modular Monolith)"]
-    A --> D[("PostgreSQL")]
-  end
-  A -->|Outbound HTTPS| SMS["SMS Gateway (External Provider)"]
+flowchart TD
+    CLI["CLI Runner (bin/governance.mjs)"]
+    POL["Policy Engine (scripts/policy-engine.mjs)"]
+    GRD["State Guardian (scripts/state-guardian.mjs)"]
+    STK["Multi-Stack Runner (scripts/stack-runner.mjs)"]
+    VRD["Verdict Engine (scripts/verdict-engine.mjs)"]
+    AGT["Agent Control Plane (scripts/agent-control.mjs)"]
+    EVI[(".governance/evidence/")]
+
+    CLI --> POL
+    CLI --> GRD
+    CLI --> STK
+    CLI --> VRD
+    CLI --> AGT
+
+    GRD -->|".governance/state.json"| EVI
+    VRD -->|"verdict.json & report.md"| EVI
 ```
 
 ---
 
-## 4. Bounded Context Modules & Boundaries
+## 3. Subsystem Responsibilities
 
-| Module            | Core Responsibility                                                    | Public API Exposed                                                 |
-| :---------------- | :--------------------------------------------------------------------- | :----------------------------------------------------------------- |
-| **Scheduling**    | Doctors, schedules, and slot availability calculation.                 | `availableSlots(repo, doctorIds, from, to)`                        |
-| **Booking**       | Appointments lifecycle, state machine, and race-condition resolution.  | `bookAppointment(deps, parcel)`, `cancelAppointment(deps, parcel)` |
-| **Notifications** | External SMS delivery, retry policies, and offline contract isolation. | `smsNotifier(config).send(phone, message, idempotencyKey)`         |
+| Subsystem | File | Core Responsibility |
+| :--- | :--- | :--- |
+| **Policy Engine** | `scripts/policy-engine.mjs` | Loads JSON policies, handles profiles (`strict`, `standard`, `lenient`), evaluates gate rules. |
+| **State Guardian** | `scripts/state-guardian.mjs` | Locks criteria, manages story lifecycle, maintains SHA-256 audit hash chain, anchors Git notes. |
+| **Stack Runner** | `scripts/stack-runner.mjs` | Discovers active language stacks (Node, PHP, Python, Java), executes tools, reports status. |
+| **Verdict Engine** | `scripts/verdict-engine.mjs` | Generates signed `verdict.json`, truthful `report.md`, and requirements traceability matrices. |
+| **Agent Control** | `scripts/agent-control.mjs` | Enforces protected path boundaries and verifies agent operating contracts. |

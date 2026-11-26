@@ -1,4 +1,4 @@
-# Brief: Mawid (Clinic Appointment Booking)
+# Brief: AI Software Engineering Governance Platform
 
 > **Governance Foundation Document 01:** High-Level Vision, Purpose & Boundaries.
 
@@ -6,36 +6,38 @@
 
 ## 1. Problem Statement
 
-Patients of small outpatient clinics currently book appointments solely by phone during working hours, encountering frequently busy lines. The receptionist spends most of their day answering booking inquiries and manually recording schedules in physical paper logs, leading to scheduling conflicts and missed appointments.
+Autonomous AI coding agents (such as GitHub Copilot Workspace, Claude Code, Cursor, and Gemini CLI) can write and edit large codebases with unprecedented velocity. However, without deterministic guardrails, agents frequently:
+- Weaken or delete acceptance criteria when tests fail.
+- Bypass linting, formatting, or security gates.
+- Produce false-positive test results by skipping required checks.
+- Modify protected repository metadata (licenses, policies, state files).
+
+`@muathrabuouda/ai-governance` establishes an immutable, policy-driven verification harness ensuring **"No code without proof"**.
 
 ---
 
-## 2. Users & Roles
+## 2. Target Audience & Users
 
-| Role             | Operational Needs from the System                                                              |
-| :--------------- | :--------------------------------------------------------------------------------------------- |
-| **Patient**      | View available slots, book an appointment, and cancel independently without phone calls.       |
-| **Receptionist** | Confirm appointments, check in patient arrivals, and manage daily clinic operational schedule. |
-| **Doctor**       | View the daily patient roster and appointment statuses.                                        |
+| User Persona | Value Proposition |
+| :--- | :--- |
+| **Engineering Leads** | Enforces consistent engineering standards across multi-language repositories without manual code review bottlenecks. |
+| **DevOps / CI Engineers** | Deterministic pipeline that exits non-zero on policy violations and produces signed cryptographic verdict artifacts. |
+| **Compliance & Auditors** | Cryptographic audit trail linking every Git commit to approved specifications, threat models, and test executions. |
+| **AI Agent Operators** | Sandboxes AI agents within strict path boundaries, preventing catastrophic tampering with repository infrastructure. |
 
 ---
 
 ## 3. Success Metrics
 
-- At least 50% of bookings are submitted digitally through the system during the first month.
-- Zero double-booking occurrences across all doctors and slots.
+- 100% detection of unauthorized modifications to acceptance criteria tables.
+- Zero false-positive gate passes when required checks are missing or unconfigured.
+- Sub-5-second execution overhead for standard local pre-push verification.
+- Complete cryptographic verdict artifacts (`verdict.json`, `report.md`) generated on every run.
 
 ---
 
-## 4. Out-of-Scope (Deferred for v1)
+## 4. Boundaries & Out-of-Scope (v1)
 
-- Online payment processing and deposit collection.
-- Electronic Medical Records (EMR) / patient medical history.
-- Native mobile applications (responsive mobile web interface is provided).
-- Multi-clinic and multi-tenant management.
-
----
-
-## 5. Open Questions
-
-- Does the patient require a persistent account with password, or is an SMS-based one-time code (OTP) sufficient? (Pending clinic director confirmation).
+- Decentralized ledger or blockchain network dependencies.
+- Proprietary closed-source SaaS control planes.
+- Autonomous agent code generation (governance validates and guides agents; it does not replace developer models).

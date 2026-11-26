@@ -2,10 +2,10 @@
   "version": "1.0.0",
   "specVersion": "1.0.0",
   "storyHashes": {
-    "1": "2d7b492c5fbbcc9df77a2f117127750588e912a971158d16f978128d0cf56519",
-    "2": "740b153b2bca8f76613d03f8729eebc7100e30fe7bd614dcd9da62d08230fc0a",
-    "3": "608256325be0229a365f92c2b9f31dbd80af0712bee4912025fefb05e7cb06c5",
-    "4": "3b570ef4708f6e9bd1b527dac4c88382fdf855b6acfdc950698832af58ac2d93"
+    "1": "c2eb4081da47d78b831ac07e9d83c541a415f2e1398ea7dfaf2741d5dc4f726e",
+    "2": "e64612ade901b6a66bf3538b2c413f0a4bb6117b34c13bb4103688061ad74537",
+    "3": "f6a954ac4a52208eef48c96038b0cf53a2e441288ddaf1705dd5ae78890a6d9e",
+    "4": "38a26f5b5e3eda97269dd6bb85ca3eda192d009cd5898287ac93061513d000c4"
   },
   "deprecatedStories": {},
   "auditLog": [
@@ -50,10 +50,40 @@
         "specHash": "be74fcce54a1c92933531767db158ff2b41b7f62cdd126717c1120e0a7ff3708"
       },
       "hash": "797f75db84fb5b37b033f7dadeb16a556e4efeb029ed61f84e59bcb161b26d13"
+    },
+    {
+      "index": 2,
+      "timestamp": "2026-11-26T19:39:31.384Z",
+      "action": "APPROVE_SPEC",
+      "author": "Muath R Abu Ouda",
+      "previousHash": "797f75db84fb5b37b033f7dadeb16a556e4efeb029ed61f84e59bcb161b26d13",
+      "attestation": {
+        "isGit": true,
+        "userName": "Muath R Abu Ouda",
+        "userEmail": "muathrabuouda@hotmail.com",
+        "commitSha": "ea7f1d332c8b86b0639079306facd89903d1c0d9",
+        "treeHash": "069f3ed6772b2d265895e450ea0c976bb243a447",
+        "signatureStatus": "N",
+        "signerName": "",
+        "signerKey": ""
+      },
+      "details": {
+        "addedStories": [],
+        "updatedStories": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ],
+        "prunedStories": [],
+        "totalActiveStories": 4,
+        "specHash": "e336a4d73b8d170425806794677965f09310a17086d20c14ff550c0beb40479f"
+      },
+      "hash": "2fa8d2bfc182f4b3e61e3b386b5f3a110c9b79357dc740ed10e67324c6875f6d"
     }
   ],
-  "lastVerifiedAt": "2026-11-26T18:30:41.644Z",
-  "lastApprovedAt": "2026-11-26T18:30:41.639Z",
+  "lastVerifiedAt": "2026-11-26T19:39:31.805Z",
+  "lastApprovedAt": "2026-11-26T19:39:31.384Z",
   "lastApprovedBy": "Muath R Abu Ouda",
-  "headAnchor": "31108d6cb8713053cd2f5d06723dcb6720546f2e6094d2bb506ad60ef452df74"
+  "headAnchor": "803d12403fac50877fccc3f14c93870c58625170e6ed170f672f3078bfff5c38"
 }
