@@ -7,6 +7,7 @@
  */
 
 import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,6 +32,7 @@ import {
   isKeyFingerprintAuthorized,
   loadGovernanceState,
   normalizeKey,
+  resolveStrictEnforcement,
   saveGovernanceState,
   verifyAuditChain,
   verifyCriteriaIntegrity,
@@ -150,7 +152,7 @@ describe("Governance Core Integration Tests", () => {
       state.auditLog[0].details.note = "tampered note";
       const tamperedCheck = verifyAuditChain(state);
       assert.equal(tamperedCheck.ok, false);
-      assert.match(tamperedCheck.violations[0], /tampered with/i);
+      assert.ok(tamperedCheck.violations.some((v) => /tampered with/i.test(v)));
     });
 
     test("detects broken hash chain continuity", () => {
@@ -182,7 +184,7 @@ describe("Governance Core Integration Tests", () => {
 
       const chainCheck = verifyAuditChain(state);
       assert.equal(chainCheck.ok, false);
-      assert.match(chainCheck.violations[0], /hash chain broken/i);
+      assert.ok(chainCheck.violations.some((v) => /hash chain broken/i.test(v)));
     });
 
     test("manages story lifecycle and deprecation without false violations", () => {
@@ -494,6 +496,95 @@ Some descriptive text without any table.
         // Authorized actor is accepted in non-strict mode
         const authorizedResult = approveSpec("Muath R Abu Ouda <muathrabuouda@hotmail.com>", { actor: "muathrabuouda" }, tempDir);
         assert.equal(authorizedResult, true, "Authorized GitHub actor must be accepted");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("unifies strict resolution consistently across policy and authorized approvers", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-strict-res-test-"));
+      try {
+        const govDir = join(tempDir, ".governance");
+        mkdirSync(govDir, { recursive: true });
+
+        // Default empty directory resolves to false
+        assert.equal(resolveStrictEnforcement(tempDir), false);
+
+        // When authorized-approvers.json defines allowedKeyFingerprints, it resolves to true
+        writeFileSync(
+          join(govDir, "authorized-approvers.json"),
+          JSON.stringify({ allowedKeyFingerprints: ["4A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B"] }),
+          "utf8",
+        );
+        assert.equal(resolveStrictEnforcement(tempDir), true);
+
+        // Explicit option override takes precedence
+        assert.equal(resolveStrictEnforcement(tempDir, { strict: false }), false);
+        assert.equal(resolveStrictEnforcement(tempDir, { strict: true }), true);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("blocks uncommitted working tree modifications to state or spec in strict mode", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-dirty-test-"));
+      try {
+        const docsDir = join(tempDir, "docs", "foundation");
+        const govDir = join(tempDir, ".governance");
+        mkdirSync(docsDir, { recursive: true });
+        mkdirSync(govDir, { recursive: true });
+
+        // Initialize git repository
+        const execOptions = { cwd: tempDir, stdio: "ignore" };
+        execSync("git init", execOptions);
+        execSync('git config user.name "Tester"', execOptions);
+        execSync('git config user.email "test@example.com"', execOptions);
+
+        const specFile = join(docsDir, "02-spec.md");
+        writeFileSync(specFile, "# Specification\n### Story 1: Test\n| ID | Given | When | Then |\n| :-- | :--- | :--- | :--- |\n| 1.1 | A | B | C |\n", "utf8");
+
+        const stateFile = join(govDir, "state.json");
+        const state = {
+          version: "1.0.0",
+          specVersion: "1.0.0",
+          storyHashes: { "1": hashText("| ID | Given | When | Then |\n| :-- | :--- | :--- | :--- |\n| 1.1 | A | B | C |") },
+          auditLog: [{
+            index: 0,
+            timestamp: new Date().toISOString(),
+            action: "APPROVE_SPEC",
+            author: "Tester",
+            previousHash: "0000000000000000000000000000000000000000000000000000000000000000",
+            hash: "placeholder",
+            attestation: {
+              commitSha: "1111111111111111111111111111111111111111",
+              treeHash: "2222222222222222222222222222222222222222",
+              signatureStatus: "G",
+            },
+            details: {},
+          }],
+        };
+        state.auditLog[0].hash = calculateBlockHash(state.auditLog[0]);
+        state.headAnchor = hashText(`${state.auditLog[0].hash}:${state.auditLog[0].attestation.commitSha}:${state.auditLog[0].attestation.treeHash}`);
+        writeFileSync(stateFile, JSON.stringify(state, null, 2), "utf8");
+
+        // Initial commit
+        execSync("git add .", execOptions);
+        execSync('git commit -m "chore: initial commit"', execOptions);
+
+        // Tag anchor
+        execSync(`git tag -a "governance/spec-v0" -m "Spec Lock" HEAD`, execOptions);
+
+        // Tamper: modify state.json in working tree WITHOUT committing
+        state.auditLog[0].details = { tampered: true };
+        writeFileSync(stateFile, JSON.stringify(state, null, 2), "utf8");
+
+        // Running verifyAuditChain in strict mode MUST fail with uncommitted working tree violation
+        const checkResult = verifyAuditChain(state, tempDir, { strict: true });
+        assert.equal(checkResult.ok, false);
+        assert.ok(
+          checkResult.violations.some((v) => v.includes("Uncommitted working tree modifications")),
+          "Must reject uncommitted working tree modifications in strict mode",
+        );
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
