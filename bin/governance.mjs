@@ -35,6 +35,7 @@ import {
 import { loadPolicy, evaluateGate, GateStatus } from "../scripts/policy-engine.mjs";
 import { generateVerdict, loadLatestVerdict, formatVerdictTerminal } from "../scripts/verdict-engine.mjs";
 import { buildTraceabilityMatrix, formatTraceabilityTerminal } from "../scripts/traceability.mjs";
+import { auditAgentChanges, formatAgentAuditTerminal, initAgentContract } from "../scripts/agent-control.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -451,6 +452,23 @@ const COMMANDS = {
       const storyFilter = args[0];
       const matrix = buildTraceabilityMatrix(process.cwd());
       console.log(formatTraceabilityTerminal(matrix, storyFilter));
+    },
+  },
+  "agent:audit": {
+    description: "Audit working tree changes against Agent Governance Contract rules and protected paths",
+    action: () => {
+      const res = auditAgentChanges(process.cwd());
+      console.log(formatAgentAuditTerminal(res));
+      if (!res.passed) {
+        process.exit(1);
+      }
+    },
+  },
+  "init:contract": {
+    description: "Initialize or reset Agent Governance Contract: governance init:contract [--force]",
+    action: () => {
+      const isForce = args.includes("--force") || args.includes("-f");
+      initAgentContract(process.cwd(), isForce);
     },
   },
   "audit:git": {

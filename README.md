@@ -138,6 +138,21 @@ governance verdict
 governance trace
 ```
 
+### 4. Agent Governance & Control Plane (`.governance/agent-contract.json`)
+
+To transition from passive testing to active control of autonomous AI agents, AI Governance establishes an immutable **Agent Governance Contract**:
+- **Protected Paths:** Unauthorized modifications to `.governance/state.json`, `.governance/policy.json`, `.governance/agent-contract.json`, `docs/foundation/adr/**`, and `LICENSE` are strictly blocked.
+- **Forbidden Actions:** Agents are prohibited from deleting test files, commenting out assertions, or mutating existing ADRs.
+- **Workspace Guardrails:** Run `governance agent:audit` to audit uncommitted or branch changes against permission boundaries.
+
+```bash
+# Audit workspace changes against agent contract
+governance agent:audit
+
+# Initialize custom agent contract
+governance init:contract
+```
+
 ---
 
 ## Governance CLI (`governance`)
@@ -153,6 +168,8 @@ governance <command> [options]
 | `check [--profile=...]` | Multi-stack verification pipeline enforcing all 9 policy gates (strict, standard, lenient). |
 | `verdict` | Displays the latest cryptographic governance verdict and audit proof summary. |
 | `trace [story]` | Displays the requirement-to-code and test traceability matrix. |
+| `agent:audit` | Audits working tree changes against Agent Governance Contract rules and protected paths. |
+| `init:contract [--force]` | Initializes or resets the Agent Governance Contract (`.governance/agent-contract.json`). |
 | `status` | Summarizes project governance status, registered ADRs, and active story progression. |
 | `init [title] [--force]` | Initializes the full 3-pillar methodology documentation suite (safe by default). |
 | `approve:spec [name] [--prune]` | Formally approves and cryptographically locks Acceptance Criteria into `.governance/state.json`. |

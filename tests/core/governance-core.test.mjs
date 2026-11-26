@@ -37,6 +37,11 @@ import {
 import { detectStacks, isExecutableAvailable, runStage } from "../../scripts/stack-runner.mjs";
 import { generateVerdict, loadLatestVerdict } from "../../scripts/verdict-engine.mjs";
 import { buildTraceabilityMatrix } from "../../scripts/traceability.mjs";
+import {
+  initAgentContract,
+  isPathProtected,
+  loadAgentContract,
+} from "../../scripts/agent-control.mjs";
 
 describe("Governance Core Integration Tests", () => {
   describe("Policy Engine", () => {
@@ -303,6 +308,33 @@ describe("Governance Core Integration Tests", () => {
       try {
         const matrix = buildTraceabilityMatrix(tempDir);
         assert.ok(typeof matrix === "object");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("Agent Control & Governance Contract", () => {
+    test("identifies protected paths according to contract", () => {
+      assert.ok(isPathProtected(".governance/state.json"));
+      assert.ok(isPathProtected(".governance/policy.json"));
+      assert.ok(isPathProtected("docs/foundation/adr/001-test.md"));
+      assert.ok(isPathProtected("LICENSE.md"));
+
+      assert.equal(isPathProtected("src/components/button.ts"), null);
+      assert.equal(isPathProtected("tests/feature.test.ts"), null);
+    });
+
+    test("initializes and loads agent contract file", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-contract-test-"));
+      try {
+        const initRes = initAgentContract(tempDir);
+        assert.equal(initRes, true);
+
+        const contract = loadAgentContract(tempDir);
+        assert.equal(contract.strictMode, true);
+        assert.ok(contract.protectedPaths.includes(".governance/state.json"));
+        assert.equal(contract.forbiddenActions.deleteTestFiles, true);
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }

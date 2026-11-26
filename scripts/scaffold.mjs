@@ -413,6 +413,14 @@ export function generateAgentRules(projectRoot = process.cwd()) {
 - Domain Boundaries: Respect Hexagonal / Clean Architecture boundaries (Ports & Adapters).
 - Design System: Adhere strictly to the 70-20-10 color balance. Never use primary green as a large canvas background.
 - Conventional Commits: Formulate atomic commits strictly following conventional commit standards.
+
+## 3. Agent Permission Boundaries & Protected Paths
+- The following paths are strictly protected from automated agent modification without explicit human signoff:
+  - .governance/state.json, .governance/policy.json, .governance/agent-contract.json
+  - docs/foundation/adr/** (Existing ADRs are immutable)
+  - docs/foundation/01-ambiguity.md
+  - LICENSE / LICENSE.md
+- Modifying protected paths or deleting test files will cause an immediate failure during "governance agent:audit".
 ${endTag}`;
 
   /**
