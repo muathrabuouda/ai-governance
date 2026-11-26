@@ -1,0 +1,68 @@
+{
+  "1": {
+    "storyNumber": "1",
+    "status": "VERIFIED",
+    "hasSpec": true,
+    "isApproved": true,
+    "isDeprecated": false,
+    "deprecationReason": null,
+    "supersededBy": null,
+    "hasThreatModel": false,
+    "threatModelPath": null,
+    "implementations": [
+      "golden-project\\src\\modules\\scheduling\\available.ts"
+    ],
+    "tests": [
+      "tests\\core\\governance-core.test.mjs"
+    ],
+    "criteriaHash": "2d7b492c5fbbcc9df77a2f117127750588e912a971158d16f978128d0cf56519"
+  },
+  "2": {
+    "storyNumber": "2",
+    "status": "VERIFIED",
+    "hasSpec": true,
+    "isApproved": true,
+    "isDeprecated": false,
+    "deprecationReason": null,
+    "supersededBy": null,
+    "hasThreatModel": true,
+    "threatModelPath": "docs/lifecycle/threat-model/story-2.md",
+    "implementations": [
+      "golden-project\\src\\modules\\booking\\book.ts"
+    ],
+    "tests": [
+      "tests\\core\\governance-core.test.mjs"
+    ],
+    "criteriaHash": "740b153b2bca8f76613d03f8729eebc7100e30fe7bd614dcd9da62d08230fc0a"
+  },
+  "3": {
+    "storyNumber": "3",
+    "status": "APPROVED",
+    "hasSpec": true,
+    "isApproved": true,
+    "isDeprecated": false,
+    "deprecationReason": null,
+    "supersededBy": null,
+    "hasThreatModel": false,
+    "threatModelPath": null,
+    "implementations": [],
+    "tests": [],
+    "criteriaHash": "608256325be0229a365f92c2b9f31dbd80af0712bee4912025fefb05e7cb06c5"
+  },
+  "4": {
+    "storyNumber": "4",
+    "status": "IMPLEMENTED",
+    "hasSpec": true,
+    "isApproved": true,
+    "isDeprecated": false,
+    "deprecationReason": null,
+    "supersededBy": null,
+    "hasThreatModel": false,
+    "threatModelPath": null,
+    "implementations": [
+      "golden-project\\src\\modules\\booking\\cancel.ts"
+    ],
+    "tests": [],
+    "criteriaHash": "3b570ef4708f6e9bd1b527dac4c88382fdf855b6acfdc950698832af58ac2d93"
+  }
+}

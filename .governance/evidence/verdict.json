@@ -1,0 +1,115 @@
+{
+  "version": "1.0.0",
+  "verdict": "REQUIRES_REVIEW",
+  "summary": "2 gate(s) completed with warnings or require review: Static Analysis & Linting, Automated Test Suite",
+  "timestamp": "2026-11-26T18:48:57.156Z",
+  "durationMs": 3077,
+  "environment": {
+    "platform": "win32",
+    "nodeVersion": "v24.18.0",
+    "cwd": "J:\\ugarit\\ugarit-ai\\ai-governance"
+  },
+  "attestation": {
+    "isGit": true,
+    "userName": "Muath R Abu Ouda",
+    "userEmail": "muathrabuouda@hotmail.com",
+    "commitSha": "69203940505eba0f12bc70c7d0532c8a5c5e73d6",
+    "treeHash": "0000000000000000000000000000000000000000",
+    "stateHeadAnchor": "31108d6cb8713053cd2f5d06723dcb6720546f2e6094d2bb506ad60ef452df74"
+  },
+  "policy": {
+    "profile": "governance-engine",
+    "failOnWarning": false
+  },
+  "stacks": [
+    {
+      "name": "Node.js / TypeScript",
+      "type": "node",
+      "hasInstalledDeps": false
+    }
+  ],
+  "gates": [
+    {
+      "key": "spec_integrity",
+      "name": "Specification & Criteria Lock",
+      "required": true,
+      "status": "PASSED",
+      "passed": true,
+      "blocking": false,
+      "message": "[PASS] Specification & Criteria Lock passed"
+    },
+    {
+      "key": "threat_modeling",
+      "name": "Threat Model Coverage",
+      "required": true,
+      "status": "PASSED",
+      "passed": true,
+      "blocking": false,
+      "message": "[PASS] Threat Model Coverage passed"
+    },
+    {
+      "key": "secrets",
+      "name": "Secret Leaks & Token Scanning",
+      "required": true,
+      "status": "PASSED",
+      "passed": true,
+      "blocking": false,
+      "message": "Secrets scan failed"
+    },
+    {
+      "key": "dependencies",
+      "name": "Dependency Version Pinning & Approval",
+      "required": true,
+      "status": "PASSED",
+      "passed": true,
+      "blocking": false,
+      "message": "Dependencies verification failed"
+    },
+    {
+      "key": "git_audit",
+      "name": "Conventional Commit & Git Hygiene",
+      "required": true,
+      "status": "PASSED",
+      "passed": true,
+      "blocking": false,
+      "message": "Git commit standards audit failed"
+    },
+    {
+      "key": "formatting",
+      "name": "Code Formatting",
+      "required": false,
+      "status": "SKIPPED",
+      "passed": true,
+      "blocking": false,
+      "message": "[INFO] Code Formatting skipped: No project code formatter configured"
+    },
+    {
+      "key": "static_analysis",
+      "name": "Static Analysis & Linting",
+      "required": false,
+      "status": "SKIPPED",
+      "passed": true,
+      "blocking": false,
+      "message": "[WARN] Static Analysis & Linting is not configured: No project linter configured"
+    },
+    {
+      "key": "test_suite",
+      "name": "Automated Test Suite",
+      "required": true,
+      "status": "SKIPPED",
+      "passed": true,
+      "blocking": false,
+      "message": "[WARN] Automated Test Suite is not configured: No test runner configured in active stack (Node.js / TypeScript: node_modules missing (run npm ci / npm install))"
+    },
+    {
+      "key": "design_system",
+      "name": "UI Design Tokens & System Compliance",
+      "required": false,
+      "status": "PASSED",
+      "passed": true,
+      "blocking": false,
+      "message": "Design system token audit failed"
+    }
+  ],
+  "signature": "b64b4cb3cae1157f5cc6da75c0488b36284c7315a35d289b64eef3a50d89cac7"
+}

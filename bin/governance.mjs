@@ -33,6 +33,8 @@ import {
   lockCriteria,
 } from "../scripts/state-guardian.mjs";
 import { loadPolicy, evaluateGate, GateStatus } from "../scripts/policy-engine.mjs";
+import { generateVerdict, loadLatestVerdict, formatVerdictTerminal } from "../scripts/verdict-engine.mjs";
+import { buildTraceabilityMatrix, formatTraceabilityTerminal } from "../scripts/traceability.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -159,6 +161,8 @@ const COMMANDS = {
       console.log(`[INFO] Active Policy Profile: ${policy.profile} (${policy.profileDescription})`);
       console.log(`[INFO] Detected Stacks: ${stacks.map((s) => s.name).join(" + ")}`);
 
+      const startTime = Date.now();
+      const gateResults = [];
       let failed = false;
 
       // 1. Acceptance Criteria Integrity Gate (Spec Lock)
@@ -172,6 +176,12 @@ const COMMANDS = {
         },
         policy,
       );
+      gateResults.push({
+        key: "spec_integrity",
+        name: policy.gates.spec_integrity.name,
+        required: policy.gates.spec_integrity.required,
+        ...g1,
+      });
       if (criteriaCheck.ok) {
         console.log("   [PASS] Acceptance Criteria integrity intact (no tampering detected)");
       } else {
@@ -190,6 +200,12 @@ const COMMANDS = {
         },
         policy,
       );
+      gateResults.push({
+        key: "threat_modeling",
+        name: policy.gates.threat_modeling.name,
+        required: policy.gates.threat_modeling.required,
+        ...g2,
+      });
       if (threatCheck.ok) {
         if (threatCheck.waived && threatCheck.waived.length > 0) {
           console.log(`   [INFO] Waived stories with documented exemption: ${threatCheck.waived.join(", ")}`);
@@ -213,6 +229,12 @@ const COMMANDS = {
         },
         policy,
       );
+      gateResults.push({
+        key: "secrets",
+        name: policy.gates.secrets.name,
+        required: policy.gates.secrets.required,
+        ...g3,
+      });
       if (!g3.passed && g3.blocking) failed = true;
 
       // 4. Dependencies Verification Gate
@@ -228,6 +250,12 @@ const COMMANDS = {
         },
         policy,
       );
+      gateResults.push({
+        key: "dependencies",
+        name: policy.gates.dependencies.name,
+        required: policy.gates.dependencies.required,
+        ...g4,
+      });
       if (!g4.passed && g4.blocking) failed = true;
 
       // 5. Audit Git commits
@@ -244,16 +272,24 @@ const COMMANDS = {
         },
         policy,
       );
+      gateResults.push({
+        key: "git_audit",
+        name: policy.gates.git_audit.name,
+        required: policy.gates.git_audit.required,
+        ...g5,
+      });
       if (!g5.passed && g5.blocking) failed = true;
 
       // 6. Formatting Verification across all stacks
       let anyFormatRun = false;
+      let lastFormatGate = null;
       for (const st of stacks) {
         if (st.formatCmd) {
           anyFormatRun = true;
           console.log(`\n[STAGE 6/9] Verifying Code Formatting (${st.name})...`);
           const res = runStage(`Code Formatting (${st.name})`, st.formatCmd.cmd, st.formatCmd.args, process.cwd());
           const g = evaluateGate("formatting", res, policy);
+          lastFormatGate = g;
           if (g.message && !res.passed) {
             console.log(`\n${g.message}`);
           }
@@ -269,18 +305,27 @@ const COMMANDS = {
           },
           policy,
         );
+        lastFormatGate = g;
         console.log(`\n${g.message}`);
         if (!g.passed && g.blocking) failed = true;
       }
+      gateResults.push({
+        key: "formatting",
+        name: policy.gates.formatting.name,
+        required: policy.gates.formatting.required,
+        ...lastFormatGate,
+      });
 
       // 7. Static Analysis / Linter across all stacks
       let anyLintRun = false;
+      let lastLintGate = null;
       for (const st of stacks) {
         if (st.lintCmd) {
           anyLintRun = true;
           console.log(`\n[STAGE 7/9] Running Static Analysis & Lint (${st.name})...`);
           const res = runStage(`Static Analysis (${st.name})`, st.lintCmd.cmd, st.lintCmd.args, process.cwd());
           const g = evaluateGate("static_analysis", res, policy);
+          lastLintGate = g;
           if (g.message && !res.passed) {
             console.log(`\n${g.message}`);
           }
@@ -296,18 +341,27 @@ const COMMANDS = {
           },
           policy,
         );
+        lastLintGate = g;
         console.log(`\n${g.message}`);
         if (!g.passed && g.blocking) failed = true;
       }
+      gateResults.push({
+        key: "static_analysis",
+        name: policy.gates.static_analysis.name,
+        required: policy.gates.static_analysis.required,
+        ...lastLintGate,
+      });
 
       // 8. Automated Test Suite Execution across all stacks
       let anyTestRun = false;
+      let lastTestGate = null;
       for (const st of stacks) {
         if (st.testCmd) {
           anyTestRun = true;
           console.log(`\n[STAGE 8/9] Executing Automated Test Suite (${st.name})...`);
           const res = runStage(`Test Suite (${st.name})`, st.testCmd.cmd, st.testCmd.args, process.cwd());
           const g = evaluateGate("test_suite", res, policy);
+          lastTestGate = g;
           if (!g.passed && g.blocking) failed = true;
         }
       }
@@ -327,9 +381,16 @@ const COMMANDS = {
           },
           policy,
         );
+        lastTestGate = g;
         console.log(`\n${g.message}`);
         if (!g.passed && g.blocking) failed = true;
       }
+      gateResults.push({
+        key: "test_suite",
+        name: policy.gates.test_suite.name,
+        required: policy.gates.test_suite.required,
+        ...lastTestGate,
+      });
 
       // 9. Design System Audit (if UI files exist)
       console.log("\n[STAGE 9/9] Auditing UI Design Tokens...");
@@ -348,18 +409,48 @@ const COMMANDS = {
         console.log(`\n${g9.message}`);
       }
       if (!g9.passed && g9.blocking) failed = true;
+      gateResults.push({
+        key: "design_system",
+        name: policy.gates.design_system.name,
+        required: policy.gates.design_system.required,
+        ...g9,
+      });
+
+      // 10. Generate Verdict and Traceability Matrix Evidence
+      const verdict = generateVerdict({ gateResults, policy, stacks, startTime }, process.cwd());
+      buildTraceabilityMatrix(process.cwd());
 
       console.log(`\n================================================================`);
+      console.log(`   GOVERNANCE VERDICT: [${verdict.verdict}]`);
+      console.log(`   Evidence Ledger:   .governance/evidence/verdict.json`);
+      console.log(`   Executive Report:  .governance/evidence/report.md`);
+      console.log(`   Traceability Map:  .governance/evidence/traceability.json`);
+      console.log(`   Signature:         ${verdict.signature.slice(0, 16)}...`);
+      console.log(`================================================================`);
+
       if (failed) {
-        console.error(`[FAIL] GOVERNANCE FAILED: One or more required policy gates failed!`);
-        console.error(`       Fix violations before committing or pushing code.`);
-        console.log(`================================================================\n`);
+        console.error(`\n[FAIL] GOVERNANCE FAILED: One or more required policy gates failed!`);
+        console.error(`       Fix violations before committing or pushing code.\n`);
         process.exit(1);
       } else {
-        console.log(`[PASS] GOVERNANCE PASSED: All active verification gates passed!`);
-        console.log(`================================================================\n`);
+        console.log(`\n[PASS] GOVERNANCE PASSED: All active verification gates passed!\n`);
         process.exit(0);
       }
+    },
+  },
+  verdict: {
+    description: "Display latest governance verdict and cryptographic evidence summary",
+    action: () => {
+      const v = loadLatestVerdict(process.cwd());
+      console.log(formatVerdictTerminal(v));
+    },
+  },
+  trace: {
+    description: "Display requirement-to-code and test traceability matrix: governance trace [story-number]",
+    action: () => {
+      const storyFilter = args[0];
+      const matrix = buildTraceabilityMatrix(process.cwd());
+      console.log(formatTraceabilityTerminal(matrix, storyFilter));
     },
   },
   "audit:git": {

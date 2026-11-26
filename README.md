@@ -125,6 +125,19 @@ Instead of conflating skipped steps with passed results, every gate outputs an e
 - `NOT_CONFIGURED`: Tool or runner not found in environment (triggers policy evaluation based on `on_missing`).
 - `REQUIRES_REVIEW`: Informational gate requiring human sign-off.
 
+### 3. Verdict & Traceability Engine (`.governance/evidence/`)
+
+Every execution of `governance check` generates cryptographic proof in `.governance/evidence/`:
+1. **`verdict.json`:** Machine-readable proof signed with SHA-256 digest, recording committer attestation, state head anchor, timings, and all 9 gate statuses (`APPROVED` | `REJECTED` | `REQUIRES_REVIEW`).
+2. **`report.md`:** Executive markdown summary with ASCII compliance checklist for PR comments and compliance audits.
+3. **`traceability.json`:** Requirement-to-code mapping linking user stories to implementation files, test suites, and STRIDE threat models.
+
+Inspect the latest verdict or traceability matrix at any time:
+```bash
+governance verdict
+governance trace
+```
+
 ---
 
 ## Governance CLI (`governance`)
@@ -138,6 +151,8 @@ governance <command> [options]
 | Command | Description |
 | :--- | :--- |
 | `check [--profile=...]` | Multi-stack verification pipeline enforcing all 9 policy gates (strict, standard, lenient). |
+| `verdict` | Displays the latest cryptographic governance verdict and audit proof summary. |
+| `trace [story]` | Displays the requirement-to-code and test traceability matrix. |
 | `status` | Summarizes project governance status, registered ADRs, and active story progression. |
 | `init [title] [--force]` | Initializes the full 3-pillar methodology documentation suite (safe by default). |
 | `approve:spec [name] [--prune]` | Formally approves and cryptographically locks Acceptance Criteria into `.governance/state.json`. |

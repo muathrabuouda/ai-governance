@@ -35,6 +35,8 @@ import {
 } from "../../scripts/state-guardian.mjs";
 
 import { detectStacks, isExecutableAvailable, runStage } from "../../scripts/stack-runner.mjs";
+import { generateVerdict, loadLatestVerdict } from "../../scripts/verdict-engine.mjs";
+import { buildTraceabilityMatrix } from "../../scripts/traceability.mjs";
 
 describe("Governance Core Integration Tests", () => {
   describe("Policy Engine", () => {
@@ -227,6 +229,83 @@ describe("Governance Core Integration Tests", () => {
     test("detects command availability correctly", () => {
       assert.equal(isExecutableAvailable("node"), true);
       assert.equal(isExecutableAvailable("non_existent_executable_12345"), false);
+    });
+  });
+
+  describe("Verdict & Traceability Engine", () => {
+    test("generates cryptographic verdict.json and report.md evidence", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-verdict-test-"));
+      try {
+        const gateResults = [
+          {
+            key: "spec_integrity",
+            name: "Spec Lock",
+            required: true,
+            status: GateStatus.PASSED,
+            passed: true,
+            blocking: false,
+          },
+          {
+            key: "test_suite",
+            name: "Test Suite",
+            required: true,
+            status: GateStatus.PASSED,
+            passed: true,
+            blocking: false,
+          },
+        ];
+        const policy = { profile: "strict", fail_on_warning: true };
+        const stacks = [{ name: "Node.js", type: "node", hasInstalledDeps: true }];
+
+        const verdict = generateVerdict(
+          { gateResults, policy, stacks, startTime: Date.now() - 100 },
+          tempDir,
+        );
+
+        assert.equal(verdict.verdict, "APPROVED");
+        assert.ok(verdict.signature);
+        assert.equal(verdict.signature.length, 64);
+        assert.equal(verdict.gates.length, 2);
+
+        const loaded = loadLatestVerdict(tempDir);
+        assert.ok(loaded);
+        assert.equal(loaded.signature, verdict.signature);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("sets verdict to REJECTED when required gate fails", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-verdict-fail-"));
+      try {
+        const gateResults = [
+          {
+            key: "secrets",
+            name: "Secret Scan",
+            required: true,
+            status: GateStatus.FAILED,
+            passed: false,
+            blocking: true,
+          },
+        ];
+        const verdict = generateVerdict(
+          { gateResults, policy: { profile: "standard" }, stacks: [], startTime: Date.now() },
+          tempDir,
+        );
+        assert.equal(verdict.verdict, "REJECTED");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("builds traceability matrix mapping stories to evidence", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-trace-test-"));
+      try {
+        const matrix = buildTraceabilityMatrix(tempDir);
+        assert.ok(typeof matrix === "object");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
     });
   });
 });
