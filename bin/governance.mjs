@@ -216,11 +216,11 @@ const COMMANDS = {
   },
   "audit:git": {
     description: "Audit git commits against Conventional Commits standards",
-    action: () => runScript("scripts/audit-git.mjs", args),
+    action: () => runScript("scripts/audit-git.mjs", [process.cwd(), ...args]),
   },
   "audit:design": {
     description: "Audit UI templates for Design System rules (palette, 70-20-10, no green bg)",
-    action: () => runScript("scripts/audit-design.mjs", args),
+    action: () => runScript("scripts/audit-design.mjs", [process.cwd(), ...args]),
   },
   secrets: {
     description: "Scan codebase for accidental secret or token leaks",
@@ -356,7 +356,7 @@ function runNpmScript(scriptName) {
 function runScript(scriptRelativePath, extraArgs = []) {
   const fullPath = resolve(rootDir, scriptRelativePath);
   const result = spawnSync(process.execPath, [fullPath, ...extraArgs], {
-    cwd: rootDir,
+    cwd: process.cwd(),
     stdio: "inherit",
   });
   process.exit(result.status ?? 0);
