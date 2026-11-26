@@ -24,7 +24,7 @@ import {
   installGitHooks,
   installCiWorkflow,
 } from "../scripts/scaffold.mjs";
-import { detectStack, runStage } from "../scripts/stack-runner.mjs";
+import { detectStacks, runStage } from "../scripts/stack-runner.mjs";
 import {
   verifyCriteriaIntegrity,
   verifyThreatModelCoverage,
@@ -32,6 +32,7 @@ import {
   deprecateStory,
   lockCriteria,
 } from "../scripts/state-guardian.mjs";
+import { loadPolicy, evaluateGate, GateStatus } from "../scripts/policy-engine.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -139,96 +140,195 @@ const COMMANDS = {
 
   // Verification & Engineering Gates
   check: {
-    description: "Run complete verification pipeline: stack tests, lint, format, secrets, git audit",
+    description: "Run complete policy-driven verification pipeline across all detected project stacks",
     action: () => {
       console.log(`\n================================================================`);
       console.log(`   GOVERNANCE VERIFICATION PIPELINE`);
       console.log(`   Target Workspace: ${process.cwd()}`);
       console.log(`================================================================`);
 
-      const stack = detectStack(process.cwd());
-      console.log(`\n[INFO] Detected Stack: ${stack.name}`);
+      const policy = loadPolicy(process.cwd());
+      const stacks = detectStacks(process.cwd());
+      console.log(`[INFO] Active Policy Profile: ${policy.profile}`);
+      console.log(`[INFO] Detected Stacks: ${stacks.map((s) => s.name).join(" + ")}`);
+
       let failed = false;
 
       // 1. Acceptance Criteria Integrity Gate (Spec Lock)
-      console.log("\n[STAGE 1/8] Verifying Specification & Acceptance Criteria Integrity...");
+      console.log("\n[STAGE 1/9] Verifying Specification & Acceptance Criteria Integrity...");
       const criteriaCheck = verifyCriteriaIntegrity(process.cwd());
-      if (!criteriaCheck.ok) {
-        for (const v of criteriaCheck.violations) {
-          console.error(`   [FAIL] ${v}`);
-        }
-        failed = true;
-      } else {
+      const g1 = evaluateGate(
+        "spec_integrity",
+        {
+          status: criteriaCheck.ok ? GateStatus.PASSED : GateStatus.FAILED,
+          message: criteriaCheck.violations.join("\n   [FAIL] "),
+        },
+        policy,
+      );
+      if (criteriaCheck.ok) {
         console.log("   [PASS] Acceptance Criteria integrity intact (no tampering detected)");
+      } else {
+        console.error(`   ${g1.message}`);
+        if (g1.blocking) failed = true;
       }
 
       // 2. Threat Model Coverage Gate
-      console.log("\n[STAGE 2/8] Auditing Threat Model coverage for active stories...");
+      console.log("\n[STAGE 2/9] Auditing Threat Model coverage for active stories...");
       const threatCheck = verifyThreatModelCoverage(process.cwd());
-      if (!threatCheck.ok) {
-        for (const v of threatCheck.violations) {
-          console.error(`   [FAIL] ${v}`);
-        }
-        failed = true;
-      } else {
+      const g2 = evaluateGate(
+        "threat_modeling",
+        {
+          status: threatCheck.ok ? GateStatus.PASSED : GateStatus.FAILED,
+          message: threatCheck.violations.join("\n   [FAIL] "),
+        },
+        policy,
+      );
+      if (threatCheck.ok) {
         if (threatCheck.waived && threatCheck.waived.length > 0) {
           console.log(`   [INFO] Waived stories with documented exemption: ${threatCheck.waived.join(", ")}`);
         }
         console.log("   [PASS] Threat model coverage verified for active stories");
+      } else {
+        console.error(`   ${g2.message}`);
+        if (g2.blocking) failed = true;
       }
 
       // 3. Secrets Scan in current project
-      console.log("\n[STAGE 3/8] Scanning for secret leaks...");
+      console.log("\n[STAGE 3/9] Scanning for secret leaks...");
       const secretsResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/scan-secrets.mjs"), process.cwd()], {
         stdio: "inherit",
       });
-      if (secretsResult.status !== 0) failed = true;
+      const g3 = evaluateGate(
+        "secrets",
+        {
+          status: secretsResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
+          message: "Secrets scan failed",
+        },
+        policy,
+      );
+      if (!g3.passed && g3.blocking) failed = true;
 
-      // 4. Audit Git commits
-      console.log("\n[STAGE 4/8] Auditing Git commits...");
+      // 4. Dependencies Verification Gate
+      console.log("\n[STAGE 4/9] Verifying Dependencies Pinning and Approvals...");
+      const depsResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/check-deps.mjs"), process.cwd()], {
+        stdio: "inherit",
+      });
+      const g4 = evaluateGate(
+        "dependencies",
+        {
+          status: depsResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
+          message: "Dependencies verification failed",
+        },
+        policy,
+      );
+      if (!g4.passed && g4.blocking) failed = true;
+
+      // 5. Audit Git commits
+      console.log("\n[STAGE 5/9] Auditing Git commits...");
       const gitResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-git.mjs"), process.cwd()], {
         cwd: process.cwd(),
         stdio: "inherit",
       });
-      if (gitResult.status !== 0) failed = true;
+      const g5 = evaluateGate(
+        "git_audit",
+        {
+          status: gitResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
+          message: "Git commit standards audit failed",
+        },
+        policy,
+      );
+      if (!g5.passed && g5.blocking) failed = true;
 
-      // 5. Formatting Verification
-      if (stack.formatCmd) {
-        console.log(`\n[STAGE 5/8] Verifying Code Formatting (${stack.name})...`);
-        const ok = runStage("Code Formatting", stack.formatCmd.cmd, stack.formatCmd.args, process.cwd());
-        if (!ok) failed = true;
-      } else {
-        console.log(`\n[INFO] [STAGE 5/8] Code Formatting: No project formatter configured (skipped)`);
+      // 6. Formatting Verification across all stacks
+      let anyFormatRun = false;
+      for (const st of stacks) {
+        if (st.formatCmd) {
+          anyFormatRun = true;
+          console.log(`\n[STAGE 6/9] Verifying Code Formatting (${st.name})...`);
+          const res = runStage(`Code Formatting (${st.name})`, st.formatCmd.cmd, st.formatCmd.args, process.cwd());
+          const g = evaluateGate("formatting", res, policy);
+          if (!g.passed && g.blocking) failed = true;
+        }
+      }
+      if (!anyFormatRun) {
+        const g = evaluateGate(
+          "formatting",
+          {
+            status: GateStatus.NOT_CONFIGURED,
+            message: "No project code formatter configured",
+          },
+          policy,
+        );
+        console.log(`\n${g.message}`);
+        if (!g.passed && g.blocking) failed = true;
       }
 
-      // 6. Static Analysis / Linter
-      if (stack.lintCmd) {
-        console.log(`\n[STAGE 6/8] Running Static Analysis & Lint (${stack.name})...`);
-        const ok = runStage("Static Analysis", stack.lintCmd.cmd, stack.lintCmd.args, process.cwd());
-        if (!ok) failed = true;
-      } else {
-        console.log(`\n[INFO] [STAGE 6/8] Static Analysis: No project linter configured (skipped)`);
+      // 7. Static Analysis / Linter across all stacks
+      let anyLintRun = false;
+      for (const st of stacks) {
+        if (st.lintCmd) {
+          anyLintRun = true;
+          console.log(`\n[STAGE 7/9] Running Static Analysis & Lint (${st.name})...`);
+          const res = runStage(`Static Analysis (${st.name})`, st.lintCmd.cmd, st.lintCmd.args, process.cwd());
+          const g = evaluateGate("static_analysis", res, policy);
+          if (!g.passed && g.blocking) failed = true;
+        }
+      }
+      if (!anyLintRun) {
+        const g = evaluateGate(
+          "static_analysis",
+          {
+            status: GateStatus.NOT_CONFIGURED,
+            message: "No project linter configured",
+          },
+          policy,
+        );
+        console.log(`\n${g.message}`);
+        if (!g.passed && g.blocking) failed = true;
       }
 
-      // 7. Automated Test Suite Execution
-      if (stack.testCmd) {
-        console.log(`\n[STAGE 7/8] Executing Automated Test Suite (${stack.name})...`);
-        const ok = runStage("Test Suite", stack.testCmd.cmd, stack.testCmd.args, process.cwd());
-        if (!ok) failed = true;
-      } else {
-        console.log(`\n[INFO] [STAGE 7/8] Test Suite: No test runner configured (skipped)`);
+      // 8. Automated Test Suite Execution across all stacks
+      let anyTestRun = false;
+      for (const st of stacks) {
+        if (st.testCmd) {
+          anyTestRun = true;
+          console.log(`\n[STAGE 8/9] Executing Automated Test Suite (${st.name})...`);
+          const res = runStage(`Test Suite (${st.name})`, st.testCmd.cmd, st.testCmd.args, process.cwd());
+          const g = evaluateGate("test_suite", res, policy);
+          if (!g.passed && g.blocking) failed = true;
+        }
+      }
+      if (!anyTestRun) {
+        const g = evaluateGate(
+          "test_suite",
+          {
+            status: GateStatus.NOT_CONFIGURED,
+            message: "No test runner configured in active stack",
+          },
+          policy,
+        );
+        console.log(`\n${g.message}`);
+        if (!g.passed && g.blocking) failed = true;
       }
 
-      // 8. Design System Audit (if UI files exist)
-      console.log("\n[STAGE 8/8] Auditing UI Design Tokens...");
+      // 9. Design System Audit (if UI files exist)
+      console.log("\n[STAGE 9/9] Auditing UI Design Tokens...");
       const designResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-design.mjs"), process.cwd()], {
         stdio: "inherit",
       });
-      if (designResult.status !== 0) failed = true;
+      const g9 = evaluateGate(
+        "design_system",
+        {
+          status: designResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
+          message: "Design system token audit failed",
+        },
+        policy,
+      );
+      if (!g9.passed && g9.blocking) failed = true;
 
       console.log(`\n================================================================`);
       if (failed) {
-        console.error(`[FAIL] GOVERNANCE FAILED: One or more verification gates failed!`);
+        console.error(`[FAIL] GOVERNANCE FAILED: One or more required policy gates failed!`);
         console.error(`       Fix violations before committing or pushing code.`);
         console.log(`================================================================\n`);
         process.exit(1);

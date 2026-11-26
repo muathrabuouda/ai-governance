@@ -1,0 +1,51 @@
+{
+  "version": "1.0.0",
+  "profile": "governance-engine",
+  "gates": {
+    "spec_integrity": {
+      "name": "Specification & Criteria Lock",
+      "required": true,
+      "on_missing": "fail"
+    },
+    "threat_modeling": {
+      "name": "Threat Model Coverage",
+      "required": true,
+      "on_missing": "fail"
+    },
+    "secrets": {
+      "name": "Secret Leaks & Token Scanning",
+      "required": true,
+      "on_missing": "fail"
+    },
+    "dependencies": {
+      "name": "Dependency Version Pinning & Approval",
+      "required": true,
+      "on_missing": "fail"
+    },
+    "git_audit": {
+      "name": "Conventional Commit & Git Hygiene",
+      "required": true,
+      "on_missing": "fail"
+    },
+    "formatting": {
+      "name": "Code Formatting",
+      "required": false,
+      "on_missing": "skip"
+    },
+    "static_analysis": {
+      "name": "Static Analysis & Linting",
+      "required": false,
+      "on_missing": "warn"
+    },
+    "test_suite": {
+      "name": "Automated Test Suite",
+      "required": true,
+      "on_missing": "warn"
+    },
+    "design_system": {
+      "name": "UI Design Tokens & System Compliance",
+      "required": false,
+      "on_missing": "skip"
+    }
+  }
+}
