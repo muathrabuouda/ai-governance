@@ -134,6 +134,32 @@ export function generateVerdict(
 }
 
 /**
+ * Resolves a truthful, consistent badge for a gate result.
+ * Prevents skipped or non-configured gates from displaying a false [PASS] badge.
+ *
+ * @param {object} gate
+ * @returns {string} Truthful status badge: [PASS], [FAIL], [SKIP], [NOT CONFIGURED], [WARN]
+ */
+export function getGateBadge(gate) {
+  if (gate.status === GateStatus.PASSED) {
+    return "[PASS]";
+  }
+  if (gate.status === GateStatus.FAILED) {
+    return "[FAIL]";
+  }
+  if (gate.status === GateStatus.SKIPPED) {
+    return "[SKIP]";
+  }
+  if (gate.status === GateStatus.NOT_CONFIGURED) {
+    return gate.passed ? "[NOT CONFIGURED]" : "[FAIL]";
+  }
+  if (gate.status === GateStatus.REQUIRES_REVIEW) {
+    return "[WARN]";
+  }
+  return gate.passed ? "[PASS]" : "[FAIL]";
+}
+
+/**
  * Formats human-readable markdown report from verdict object.
  * @param {object} verdict
  * @returns {string}
@@ -147,9 +173,7 @@ export function generateReportMarkdown(verdict) {
 
   const gateRows = verdict.gates
     .map((g) => {
-      const statusBadge = g.passed
-        ? g.status === GateStatus.REQUIRES_REVIEW ? "[WARN]" : "[PASS]"
-        : "[FAIL]";
+      const statusBadge = getGateBadge(g);
       const requiredStr = g.required ? "Required" : "Optional";
       return `| ${statusBadge} ${g.name} | ${requiredStr} | ${g.status} | ${g.message.replace(/\|/g, "\\|")} |`;
     })

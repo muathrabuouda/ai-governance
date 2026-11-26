@@ -173,7 +173,9 @@ const COMMANDS = {
         "spec_integrity",
         {
           status: criteriaCheck.ok ? GateStatus.PASSED : GateStatus.FAILED,
-          message: criteriaCheck.violations.join("\n   [FAIL] "),
+          message: criteriaCheck.ok
+            ? "Acceptance Criteria integrity intact (no tampering detected)"
+            : criteriaCheck.violations.join("\n   [FAIL] "),
         },
         policy,
       );
@@ -197,7 +199,9 @@ const COMMANDS = {
         "threat_modeling",
         {
           status: threatCheck.ok ? GateStatus.PASSED : GateStatus.FAILED,
-          message: threatCheck.violations.join("\n   [FAIL] "),
+          message: threatCheck.ok
+            ? "Threat model coverage verified for active stories"
+            : threatCheck.violations.join("\n   [FAIL] "),
         },
         policy,
       );
@@ -226,7 +230,7 @@ const COMMANDS = {
         "secrets",
         {
           status: secretsResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
-          message: "Secrets scan failed",
+          message: secretsResult.status === 0 ? "No secret leaks detected" : "Secrets scan detected potential leaks",
         },
         policy,
       );
@@ -247,7 +251,7 @@ const COMMANDS = {
         "dependencies",
         {
           status: depsResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
-          message: "Dependencies verification failed",
+          message: depsResult.status === 0 ? "All dependencies pinned and verified" : "Dependencies verification failed",
         },
         policy,
       );
@@ -269,7 +273,7 @@ const COMMANDS = {
         "git_audit",
         {
           status: gitResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
-          message: "Git commit standards audit failed",
+          message: gitResult.status === 0 ? "Git commit conventions and history valid" : "Git commit standards audit failed",
         },
         policy,
       );
@@ -402,7 +406,10 @@ const COMMANDS = {
         "design_system",
         {
           status: designResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
-          message: "Design system token audit failed",
+          message:
+            designResult.status === 0
+              ? "Design system tokens compliant"
+              : "Design system token audit failed",
         },
         policy,
       );

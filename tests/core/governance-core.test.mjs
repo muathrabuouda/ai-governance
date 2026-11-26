@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { describe } from "node:test";
@@ -35,7 +35,7 @@ import {
 } from "../../scripts/state-guardian.mjs";
 
 import { detectStacks, isExecutableAvailable, runStage } from "../../scripts/stack-runner.mjs";
-import { generateVerdict, loadLatestVerdict } from "../../scripts/verdict-engine.mjs";
+import { generateVerdict, getGateBadge, loadLatestVerdict } from "../../scripts/verdict-engine.mjs";
 import { buildTraceabilityMatrix } from "../../scripts/traceability.mjs";
 import {
   initAgentContract,
@@ -379,6 +379,54 @@ Some descriptive text without any table.
           tempDir,
         );
         assert.equal(verdict.verdict, "REJECTED");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("renders truthful status badges for all gate states in report.md", () => {
+      // 1. Verify getGateBadge helper directly
+      assert.equal(getGateBadge({ status: GateStatus.PASSED, passed: true }), "[PASS]");
+      assert.equal(getGateBadge({ status: GateStatus.FAILED, passed: false }), "[FAIL]");
+      assert.equal(getGateBadge({ status: GateStatus.SKIPPED, passed: true }), "[SKIP]");
+      assert.equal(getGateBadge({ status: GateStatus.NOT_CONFIGURED, passed: true }), "[NOT CONFIGURED]");
+      assert.equal(getGateBadge({ status: GateStatus.NOT_CONFIGURED, passed: false }), "[FAIL]");
+      assert.equal(getGateBadge({ status: GateStatus.REQUIRES_REVIEW, passed: true }), "[WARN]");
+
+      // 2. Verify full verdict report generation with skipped gate
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-report-badge-test-"));
+      try {
+        const gateResults = [
+          {
+            key: "secrets",
+            name: "Secrets Scan",
+            required: true,
+            status: GateStatus.PASSED,
+            passed: true,
+            blocking: false,
+            message: "No secret leaks detected",
+          },
+          {
+            key: "formatting",
+            name: "Formatting",
+            required: false,
+            status: GateStatus.SKIPPED,
+            passed: true,
+            blocking: false,
+            message: "Skipped optional formatting check",
+          },
+        ];
+
+        const verdict = generateVerdict(
+          { gateResults, policy: { profile: "standard" }, stacks: [], startTime: Date.now() },
+          tempDir,
+        );
+
+        const reportContent = readFileSync(join(tempDir, ".governance/evidence/report.md"), "utf8");
+        // Must contain truthful [SKIP] for formatting, NEVER [PASS] Formatting
+        assert.ok(reportContent.includes("[SKIP] Formatting"));
+        assert.ok(!reportContent.includes("[PASS] Formatting"));
+        assert.ok(reportContent.includes("[PASS] Secrets Scan"));
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
