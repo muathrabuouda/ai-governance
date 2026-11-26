@@ -1,6 +1,6 @@
-# AI Governance (Governance / إثبات)
+# AI Governance
 
-> **"No code without proof"** — _«لا كود بلا إثبات»_  
+> **"No code without proof"**  
 > **The AI-Native Software Engineering & Verification Platform**  
 > _Authored by Muath R Abu Ouda <muathrabuouda@hotmail.com>_
 

@@ -25,7 +25,7 @@ const cfg = (http: Http) => ({ baseUrl: "https://sms.example", apiKey: "k", http
 
 test("request matches the contract: method, path, headers, required body fields", async () => {
   const p = fakeProvider([202]);
-  await smsNotifier(cfg(p.http)).send("+970599123456", "تذكير بموعدك غدًا", "appt-1:reminder");
+  await smsNotifier(cfg(p.http)).send("+970599123456", "Your appointment reminder", "appt-1:reminder");
   const c = p.calls[0];
   assert.equal(c.method, contract.request.method);
   assert.equal(new URL(c.url).pathname, contract.request.path);
@@ -33,31 +33,31 @@ test("request matches the contract: method, path, headers, required body fields"
   for (const f of contract.request.body.required) assert.ok(c.body[f], `missing body field ${f}`);
 });
 
-test("202 → ok with the provider id", async () => {
-  const r = await smsNotifier(cfg(fakeProvider([202]).http)).send("+970599123456", "مرحبًا", "k1");
+test("202 -> ok with the provider id", async () => {
+  const r = await smsNotifier(cfg(fakeProvider([202]).http)).send("+970599123456", "Hello", "k1");
   assert.deepEqual(r, { ok: true, providerId: "msg_8f2c" });
 });
 
-test("400 → Rejected, and no retry (our mistake)", async () => {
+test("400 -> Rejected, and no retry (our mistake)", async () => {
   const p = fakeProvider([400]);
-  assert.deepEqual(await smsNotifier(cfg(p.http)).send("+970599123456", "مرحبًا", "k2"), {
+  assert.deepEqual(await smsNotifier(cfg(p.http)).send("+970599123456", "Hello", "k2"), {
     ok: false,
     error: "Rejected",
   });
   assert.equal(p.calls.length, 1);
 });
 
-test("ac_2_3: 429 then 202 → retried with the SAME idempotency key", async () => {
+test("ac_2_3: 429 then 202 -> retried with the SAME idempotency key", async () => {
   const p = fakeProvider([429, 202]);
-  const r = await smsNotifier(cfg(p.http)).send("+970599123456", "مرحبًا", "appt-7:confirm");
+  const r = await smsNotifier(cfg(p.http)).send("+970599123456", "Hello", "appt-7:confirm");
   assert.equal(r.ok, true);
   assert.equal(p.calls.length, 2);
   assert.equal(p.calls[0].headers["idempotency-key"], p.calls[1].headers["idempotency-key"]);
 });
 
-test("ac_2_3: provider down → three attempts, then Unavailable", async () => {
+test("ac_2_3: provider down -> three attempts, then Unavailable", async () => {
   const p = fakeProvider([503]);
-  assert.deepEqual(await smsNotifier(cfg(p.http)).send("+970599123456", "مرحبًا", "k3"), {
+  assert.deepEqual(await smsNotifier(cfg(p.http)).send("+970599123456", "Hello", "k3"), {
     ok: false,
     error: "Unavailable",
   });
@@ -66,19 +66,19 @@ test("ac_2_3: provider down → three attempts, then Unavailable", async () => {
 
 test("a number that is not E.164 is rejected before any call", async () => {
   const p = fakeProvider([202]);
-  assert.deepEqual(await smsNotifier(cfg(p.http)).send("0599123456", "مرحبًا", "k4"), {
+  assert.deepEqual(await smsNotifier(cfg(p.http)).send("0599123456", "Hello", "k4"), {
     ok: false,
     error: "Rejected",
   });
   assert.equal(p.calls.length, 0);
 });
 
-test("a provider that never answers → Timeout", async () => {
+test("a provider that never answers -> Timeout", async () => {
   const hang: Http = (_u, init) =>
     new Promise((_r, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason)));
   const r = await smsNotifier({ ...cfg(hang), timeoutMs: 20, maxAttempts: 1 }).send(
     "+970599123456",
-    "مرحبًا",
+    "Hello",
     "k5",
   );
   assert.deepEqual(r, { ok: false, error: "Timeout" });

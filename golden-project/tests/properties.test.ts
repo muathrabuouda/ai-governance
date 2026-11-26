@@ -2,7 +2,6 @@
 // When a case fails, the message prints the seed and the input so you can replay it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeArabic } from "../src/shared/i18n/normalize.ts";
 import { cancelAppointment } from "../src/modules/booking/cancel.ts";
 import { LATE_CANCEL_HOURS } from "../src/modules/booking/domain.ts";
 import { memoryRepo, fixedClock, appt } from "./booking/memory.ts";
@@ -12,19 +11,6 @@ function rng(seed: number) {
   let s = seed >>> 0;
   return () => (s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32;
 }
-const ARABIC = "اأإآءؤئىيةهوبتثجحخدذرزسشصضطظعغفقكلمن ًٌٍَُِّْـ";
-
-test("normalizeArabic is idempotent: normalising twice = normalising once", () => {
-  const r = rng(SEED);
-  for (let i = 0; i < 500; i++) {
-    const s = Array.from(
-      { length: 1 + Math.floor(r() * 20) },
-      () => ARABIC[Math.floor(r() * ARABIC.length)],
-    ).join("");
-    const once = normalizeArabic(s);
-    assert.equal(normalizeArabic(once), once, `seed ${SEED}, case ${i}: ${JSON.stringify(s)}`);
-  }
-});
 
 test("cancel: LateCancelled exactly when fewer than 24 hours remain (any time, any appointment)", async () => {
   const r = rng(SEED);

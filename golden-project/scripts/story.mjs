@@ -4,7 +4,6 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const toAr = (n) => String(n).replace(/\d/g, (d) => "٠١٢٣٤٥٦٧٨٩"[d]);
 export function getStory(num, specPath) {
   const defaultPath = "docs/foundation/02-spec.md";
   const projectRoot = resolve(fileURLToPath(import.meta.url), "../..");
@@ -20,21 +19,15 @@ export function getStory(num, specPath) {
 
   const spec = readFileSync(resolvedPath, "utf8");
   const blocks = spec.split(/^### /m).slice(1);
-  const ids = blocks.map((b) => b.match(/^(?:Story|القصة)\s+([0-9٠-٩]+)/i)?.[1]).filter(Boolean);
-  const block = blocks.find(
-    (b) =>
-      b.startsWith(`Story ${num}:`) ||
-      b.startsWith(`Story ${toAr(num)}:`) ||
-      b.startsWith(`القصة ${num}:`) ||
-      b.startsWith(`القصة ${toAr(num)}:`),
-  );
+  const ids = blocks.map((b) => b.match(/^Story\s+([0-9]+)/i)?.[1]).filter(Boolean);
+  const block = blocks.find((b) => b.startsWith(`Story ${num}:`));
   if (!block) return { ok: false, text: `Story ${num} not found. Available stories: ${ids.join(", ")}` };
   const lines = block.split("\n");
   const title = lines[0].trim();
   const story =
-    lines.find((l) => l.startsWith("As a") || l.startsWith("بصفتي") || l.startsWith("**As a**")) ?? "";
+    lines.find((l) => l.startsWith("As a") || l.startsWith("**As a**")) ?? "";
   const criteria = lines
-    .filter((l) => /^\|\s*[0-9٠-٩]+[٫.][0-9٠-٩]+/.test(l))
+    .filter((l) => /^\|\s*[0-9]+[.]\s*[0-9]+/.test(l))
     .map((l) =>
       l
         .split("|")

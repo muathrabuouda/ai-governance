@@ -23,7 +23,7 @@ export function slugify(text) {
   return String(text)
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9\u0621-\u064A]+/g, "-")
+    .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
 

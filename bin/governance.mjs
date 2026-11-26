@@ -184,7 +184,7 @@ const COMMANDS = {
 function printHelp() {
   console.log(`
 ================================================================
-   GOVERNANCE (إثبات) — Software Engineering Verification Engine
+   GOVERNANCE — Software Engineering Verification Engine
    "No code without proof"
 ================================================================
 

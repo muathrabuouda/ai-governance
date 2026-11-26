@@ -6,6 +6,18 @@
   "bin": {
     "governance": "./bin/governance.mjs"
   },
+  "files": [
+    "bin",
+    "scripts",
+    "prompts",
+    "templates",
+    "docs",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "homepage": "https://github.com/muathrabuouda/ai-governance",
   "repository": {
     "type": "git",

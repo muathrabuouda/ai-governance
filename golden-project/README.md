@@ -1,4 +1,4 @@
-# Golden Project (المشروع الذهبي المرجعي)
+# Golden Project
 
 > **The Living Reference Architecture Implementation**  
 > _Part of the AI Governance Platform (`@muathrabuouda/ai-governance`)._  

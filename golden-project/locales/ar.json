@@ -1,8 +1,8 @@
 {
-  "booking.slots.count": "{count, plural, zero {لا توجد فترات متاحة} one {فترة متاحة واحدة} two {فترتان متاحتان} few {# فترات متاحة} many {# فترةً متاحة} other {# فترة متاحة}}",
-  "booking.cancel.done": "أُلغي موعدك يوم {date}",
-  "booking.cancel.late": "أُلغي موعدك متأخرًا، أي قبل أقل من ٢٤ ساعة",
-  "booking.error.notCancellable": "لا يمكن إلغاء هذا الموعد",
-  "booking.error.notOwner": "هذا الموعد ليس لك",
-  "booking.book.requested": "تم استلام طلب حجزك، وسنؤكده قريبًا"
+  "booking.slots.count": "{count, plural, one {One available slot} other {{count} available slots}}",
+  "booking.cancel.done": "Your appointment has been cancelled successfully.",
+  "booking.cancel.late": "Your appointment was cancelled less than 24 hours in advance.",
+  "booking.error.notCancellable": "This appointment cannot be cancelled.",
+  "booking.error.notOwner": "You can only cancel your own appointments.",
+  "booking.book.requested": "Booking requested. We will confirm shortly."
 }
