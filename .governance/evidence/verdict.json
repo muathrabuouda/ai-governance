@@ -2,8 +2,8 @@
   "version": "1.0.0",
   "verdict": "REQUIRES_REVIEW",
   "summary": "1 gate(s) completed with warnings or require review: Static Analysis & Linting",
-  "timestamp": "2026-11-26T19:42:41.943Z",
-  "durationMs": 16799,
+  "timestamp": "2026-11-26T19:59:33.826Z",
+  "durationMs": 16487,
   "environment": {
     "platform": "win32",
     "nodeVersion": "v24.18.0",
@@ -13,8 +13,8 @@
     "isGit": true,
     "userName": "Muath R Abu Ouda",
     "userEmail": "muathrabuouda@hotmail.com",
-    "commitSha": "80aa2333c206824042a366f56c09e4b4dd36978c",
-    "treeHash": "9f20a0c8364e48d659392c8acb7899eb24543f72",
+    "commitSha": "0834d0c8d3abe86fcdd597946d52d730fdeab294",
+    "treeHash": "2b27e388c10ce6bd3b37eca308c652d3e0a5b71e",
     "signatureStatus": "N",
     "signerName": "",
     "signerKey": "",
@@ -108,11 +108,11 @@
       "key": "design_system",
       "name": "UI Design Tokens & System Compliance",
       "required": false,
-      "status": "PASSED",
+      "status": "SKIPPED",
       "passed": true,
       "blocking": false,
-      "message": "Design system tokens compliant"
+      "message": "[INFO] UI Design Tokens & System Compliance skipped: No frontend templates or UI stylesheets found (Not Applicable)"
     }
   ],
-  "signature": "48d184caa8c21ad09aec0f16281f35dd46a740259fad80502021e76360f85842"
+  "signature": "dd7dbe4063c530932828e21fab1a422a576d8e42a7f55a6dc3fbc092cfb55198"
 }

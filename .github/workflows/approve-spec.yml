@@ -1,0 +1,50 @@
+name: Approve Specification
+
+on:
+  workflow_dispatch:
+    inputs:
+      approver_name:
+        description: "Authorized Human Approver Name & Email"
+        required: true
+        default: "Muath R Abu Ouda <muathrabuouda@hotmail.com>"
+      reason:
+        description: "Reason or Release Milestone for Approval"
+        required: true
+        default: "Manual human verification of acceptance criteria"
+
+permissions:
+  contents: write
+
+jobs:
+  approve:
+    name: Human Spec Approval Boundary
+    runs-on: ubuntu-latest
+    environment: governance-approval
+
+    steps:
+      - name: Checkout Repository with Tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Node.js Runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Configure Git Committer Identity
+        run: |
+          git config user.name "AI Governance Approver"
+          git config user.email "governance@muathrabuouda.local"
+
+      - name: Cryptographically Lock Acceptance Criteria
+        run: |
+          node bin/governance.mjs approve:spec "${{ inputs.approver_name }}"
+
+      - name: Commit State and Push Immutable Tag
+        run: |
+          git add .governance/state.json
+          git commit -m "chore(spec): lock acceptance criteria approved by ${{ inputs.approver_name }} [skip ci]" || echo "No state changes"
+          git push origin HEAD:main
+          git push origin --tags
