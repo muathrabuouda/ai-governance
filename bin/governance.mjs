@@ -129,19 +129,19 @@ const COMMANDS = {
       console.log(`================================================================`);
 
       const stack = detectStack(process.cwd());
-      console.log(`\n🔍 Detected Stack: ${stack.name}`);
+      console.log(`\n[INFO] Detected Stack: ${stack.name}`);
       let failed = false;
 
       // 1. Acceptance Criteria Integrity Gate (Spec Lock)
-      console.log("\n➡️  [GATE 1/8] Verifying Specification & Acceptance Criteria Integrity...");
+      console.log("\n[STAGE 1/8] Verifying Specification & Acceptance Criteria Integrity...");
       const criteriaCheck = verifyCriteriaIntegrity(process.cwd());
       if (!criteriaCheck.ok) {
         for (const v of criteriaCheck.violations) {
-          console.error(`   ✗ ${v}`);
+          console.error(`   [FAIL] ${v}`);
         }
         failed = true;
       } else {
-        console.log("   ✓ Acceptance Criteria integrity intact (no tampering detected)");
+        console.log("   [PASS] Acceptance Criteria integrity intact (no tampering detected)");
       }
 
       // 2. Threat Model Coverage Gate
@@ -160,15 +160,15 @@ const COMMANDS = {
       }
 
       // 3. Secrets Scan in current project
-      console.log("\n➡️  [GATE 3/8] Scanning for secret leaks...");
+      console.log("\n[STAGE 3/8] Scanning for secret leaks...");
       const secretsResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/scan-secrets.mjs"), process.cwd()], {
         stdio: "inherit",
       });
       if (secretsResult.status !== 0) failed = true;
 
       // 4. Audit Git commits
-      console.log("\n➡️  [GATE 4/8] Auditing Git commits...");
-      const gitResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-git.mjs")], {
+      console.log("\n[STAGE 4/8] Auditing Git commits...");
+      const gitResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-git.mjs"), process.cwd()], {
         cwd: process.cwd(),
         stdio: "inherit",
       });
@@ -176,33 +176,33 @@ const COMMANDS = {
 
       // 5. Formatting Verification
       if (stack.formatCmd) {
-        console.log(`\n➡️  [GATE 5/8] Verifying Code Formatting (${stack.name})...`);
+        console.log(`\n[STAGE 5/8] Verifying Code Formatting (${stack.name})...`);
         const ok = runStage("Code Formatting", stack.formatCmd.cmd, stack.formatCmd.args, process.cwd());
         if (!ok) failed = true;
       } else {
-        console.log(`\nℹ️  [GATE 5/8] Code Formatting: No project formatter configured (skipped)`);
+        console.log(`\n[INFO] [STAGE 5/8] Code Formatting: No project formatter configured (skipped)`);
       }
 
       // 6. Static Analysis / Linter
       if (stack.lintCmd) {
-        console.log(`\n➡️  [GATE 6/8] Running Static Analysis & Lint (${stack.name})...`);
+        console.log(`\n[STAGE 6/8] Running Static Analysis & Lint (${stack.name})...`);
         const ok = runStage("Static Analysis", stack.lintCmd.cmd, stack.lintCmd.args, process.cwd());
         if (!ok) failed = true;
       } else {
-        console.log(`\nℹ️  [GATE 6/8] Static Analysis: No project linter configured (skipped)`);
+        console.log(`\n[INFO] [STAGE 6/8] Static Analysis: No project linter configured (skipped)`);
       }
 
       // 7. Automated Test Suite Execution
       if (stack.testCmd) {
-        console.log(`\n➡️  [GATE 7/8] Executing Automated Test Suite (${stack.name})...`);
+        console.log(`\n[STAGE 7/8] Executing Automated Test Suite (${stack.name})...`);
         const ok = runStage("Test Suite", stack.testCmd.cmd, stack.testCmd.args, process.cwd());
         if (!ok) failed = true;
       } else {
-        console.log(`\nℹ️  [GATE 7/8] Test Suite: No test runner configured (skipped)`);
+        console.log(`\n[INFO] [STAGE 7/8] Test Suite: No test runner configured (skipped)`);
       }
 
       // 8. Design System Audit (if UI files exist)
-      console.log("\n➡️  [GATE 8/8] Auditing UI Design Tokens...");
+      console.log("\n[STAGE 8/8] Auditing UI Design Tokens...");
       const designResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-design.mjs"), process.cwd()], {
         stdio: "inherit",
       });
@@ -210,12 +210,12 @@ const COMMANDS = {
 
       console.log(`\n================================================================`);
       if (failed) {
-        console.error(`❌ GOVERNANCE FAILED: One or more verification gates failed!`);
-        console.error(`   Fix violations before committing or pushing code.`);
+        console.error(`[FAIL] GOVERNANCE FAILED: One or more verification gates failed!`);
+        console.error(`       Fix violations before committing or pushing code.`);
         console.log(`================================================================\n`);
         process.exit(1);
       } else {
-        console.log(`✅ GOVERNANCE PASSED: All active verification gates passed!`);
+        console.log(`[PASS] GOVERNANCE PASSED: All active verification gates passed!`);
         console.log(`================================================================\n`);
         process.exit(0);
       }
@@ -289,7 +289,7 @@ const COMMANDS = {
         console.log(`\n=== Governance AI Software Engineering Methodology Prompts (00 to 12) ===\n`);
         for (const stage of stages) {
           const files = readdirSync(resolve(promptsPath, stage)).filter((f) => f.endsWith(".md"));
-          console.log(`  📁 ${stage} (${files.length} prompts)`);
+          console.log(`  - ${stage} (${files.length} prompts)`);
         }
         console.log(
           `\nUsage: governance prompt <stage-or-keyword> (e.g. "governance prompt requirements" or "governance prompt 01")\n`,

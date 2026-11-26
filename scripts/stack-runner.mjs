@@ -116,7 +116,7 @@ export function detectStack(projectRoot = process.cwd()) {
  * @returns {boolean}
  */
 export function runStage(stageName, cmd, args, cwd = process.cwd()) {
-  console.log(`\n➡️  [STAGE] ${stageName}...`);
+  console.log(`\n[STAGE] ${stageName}...`);
   try {
     const result = spawnSync(cmd, args, {
       cwd,
@@ -125,13 +125,13 @@ export function runStage(stageName, cmd, args, cwd = process.cwd()) {
     });
     const passed = result.status === 0;
     if (passed) {
-      console.log(`   ✓ ${stageName} passed`);
+      console.log(`   [PASS] ${stageName} passed`);
     } else {
-      console.error(`   ✗ ${stageName} failed (exit code: ${result.status})`);
+      console.error(`   [FAIL] ${stageName} failed (exit code: ${result.status})`);
     }
     return passed;
   } catch (err) {
-    console.error(`   ✗ ${stageName} encountered execution error: ${err.message}`);
+    console.error(`   [ERROR] ${stageName} encountered execution error: ${err.message}`);
     return false;
   }
 }

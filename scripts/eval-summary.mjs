@@ -24,5 +24,5 @@ for (const [ctx, runs] of groups) {
   console.log(`  mean cost        $${mean(runs.map((r) => r.cost_usd)).toFixed(2)} per run`);
   console.log(`  interventions    ${runs.reduce((s, r) => s + r.interventions, 0)}`);
   for (const [task, t] of byTask)
-    console.log(`    task ${task}: ${t.map((r) => (r.pass ? "✓" : "✗")).join(" ")}`);
+    console.log(`    task ${task}: ${t.map((r) => (r.pass ? "PASS" : "FAIL")).join(" ")}`);
 }

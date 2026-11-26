@@ -151,12 +151,12 @@ export function initDocs(projectName = "Governance Project", targetDocsDir = get
       let content = readFileSync(src, "utf8");
       content = content.replace(/\{\{PROJECT_TITLE\}\}/g, projectName);
       writeFileSync(dest, content, "utf8");
-      console.log(`  ✓ [${existsSync(dest) ? "UPDATED" : "CREATED"}] ${name}`);
+      console.log(`  [PASS] [${existsSync(dest) ? "UPDATED" : "CREATED"}] ${name}`);
       createdCount++;
     }
   }
 
-  console.log(`\n✅ Governance 3-pillar documentation suite initialized: ${createdCount} written, ${skippedCount} preserved.`);
+  console.log(`\n[PASS] Governance 3-pillar documentation suite initialized: ${createdCount} written, ${skippedCount} preserved.`);
 }
 
 /**
@@ -169,7 +169,7 @@ export function initDocs(projectName = "Governance Project", targetDocsDir = get
 export function addStory(storyNumber, title, targetDocsDir = getDocsDir()) {
   const specPath = resolve(targetDocsDir, "foundation", "02-spec.md");
   if (!existsSync(specPath)) {
-    console.error(`\n❌ Error: Specification file not found at "${specPath}". Run "governance init" first.`);
+    console.error(`\n[ERROR] Specification file not found at "${specPath}". Run "governance init" first.`);
     return false;
   }
 
@@ -178,7 +178,7 @@ export function addStory(storyNumber, title, targetDocsDir = getDocsDir()) {
   // Prevent duplicate story definition
   const storyPattern = new RegExp(`###\\s+Story\\s+${storyNumber}\\b`, "i");
   if (storyPattern.test(currentContent)) {
-    console.error(`\n❌ Error: Story ${storyNumber} already exists in "${specPath}". Use a new story number.`);
+    console.error(`\n[ERROR] Story ${storyNumber} already exists in "${specPath}". Use a new story number.`);
     return false;
   }
 
@@ -200,7 +200,7 @@ export function addStory(storyNumber, title, targetDocsDir = getDocsDir()) {
 
   currentContent += storyBlock;
   writeFileSync(specPath, currentContent, "utf8");
-  console.log(`\n✅ [SUCCESS] Story ${storyNumber} ("${title}") appended to foundation/02-spec.md`);
+  console.log(`\n[PASS] [SUCCESS] Story ${storyNumber} ("${title}") appended to foundation/02-spec.md`);
 
   // Update lifecycle/progress.md
   const progressPath = resolve(targetDocsDir, "lifecycle", "progress.md");
@@ -210,7 +210,7 @@ export function addStory(storyNumber, title, targetDocsDir = getDocsDir()) {
     if (!progressContent.includes(`Story ${storyNumber}:`)) {
       progressContent += progressEntry;
       writeFileSync(progressPath, progressContent, "utf8");
-      console.log(`✅ [UPDATED] lifecycle/progress.md updated with Story ${storyNumber}`);
+      console.log(`[PASS] [UPDATED] lifecycle/progress.md updated with Story ${storyNumber}`);
     }
   }
 
@@ -287,7 +287,7 @@ export function listAdrs(targetDocsDir = getDocsDir()) {
 
     const title = titleMatch ? titleMatch[1] : file;
     const status = statusMatch ? statusMatch[1].trim() : "Accepted";
-    console.log(`  📄 [${status.toUpperCase()}] ${file} — ${title}`);
+    console.log(`  - [${status.toUpperCase()}] ${file} — ${title}`);
   }
   console.log(`\nTotal: ${files.length} record(s)\n`);
 }
@@ -309,19 +309,19 @@ export function getStatus(targetDocsDir = getDocsDir()) {
 
   // Check Docs initialization
   if (!existsSync(targetDocsDir)) {
-    console.log(`⚠️  Governance documentation suite NOT initialized.`);
-    console.log(`👉 Run "governance init [project-name]" to initialize.\n`);
+    console.log(`[WARN] Governance documentation suite NOT initialized.`);
+    console.log(`       Run "governance init [project-name]" to initialize.\n`);
     return;
   }
 
-  console.log(`✅ Documentation Suite: Initialized (${targetDocsDir})`);
+  console.log(`[PASS] Documentation Suite: Initialized (${targetDocsDir})`);
 
   // Count ADRs
   if (existsSync(adrDir)) {
     const adrs = readdirSync(adrDir).filter((f) => f.endsWith(".md"));
-    console.log(`🏛️  Architecture Decision Records: ${adrs.length} ADR(s) documented`);
+    console.log(`[INFO] Architecture Decision Records: ${adrs.length} ADR(s) documented`);
   } else {
-    console.log(`🏛️  Architecture Decision Records: 0 (Directory missing)`);
+    console.log(`[INFO] Architecture Decision Records: 0 (Directory missing)`);
   }
 
   // Count Stories in Progress
@@ -329,7 +329,7 @@ export function getStatus(targetDocsDir = getDocsDir()) {
     const progressContent = readFileSync(progressPath, "utf8");
     const completed = (progressContent.match(/- \[[xX]\]/g) || []).length;
     const pending = (progressContent.match(/- \[ \]/g) || []).length;
-    console.log(`📋 Stories Lifecycle: ${completed} Completed | ${pending} Pending | Total: ${completed + pending}`);
+    console.log(`[INFO] Stories Lifecycle: ${completed} Completed | ${pending} Pending | Total: ${completed + pending}`);
   }
 
   // Check Agent Rules
@@ -337,13 +337,13 @@ export function getStatus(targetDocsDir = getDocsDir()) {
   const claudeRules = existsSync(resolve(projectRoot, "CLAUDE.md"));
   const copilotRules = existsSync(resolve(projectRoot, ".github", "copilot-instructions.md"));
 
-  console.log(`🤖 Agent Rules Configuration:`);
-  console.log(`   - .cursorrules: ${cursorRules ? "✅ Configured" : "❌ Not found"}`);
-  console.log(`   - CLAUDE.md: ${claudeRules ? "✅ Configured" : "❌ Not found"}`);
-  console.log(`   - Copilot instructions: ${copilotRules ? "✅ Configured" : "❌ Not found"}`);
+  console.log(`[INFO] Agent Rules Configuration:`);
+  console.log(`   - .cursorrules: ${cursorRules ? "Configured" : "Not found"}`);
+  console.log(`   - CLAUDE.md: ${claudeRules ? "Configured" : "Not found"}`);
+  console.log(`   - Copilot instructions: ${copilotRules ? "Configured" : "Not found"}`);
 
   if (!cursorRules && !claudeRules && !copilotRules) {
-    console.log(`👉 Tip: Run "governance rules" to generate agent instruction files automatically.\n`);
+    console.log(`[INFO] Tip: Run "governance rules" to generate agent instruction files automatically.\n`);
   } else {
     console.log();
   }
@@ -439,19 +439,19 @@ ${endTag}`;
 
   // 1. .cursorrules
   safeMergeFile(resolve(projectRoot, ".cursorrules"));
-  console.log(`  ✓ [MANAGED] .cursorrules`);
+  console.log(`  [PASS] [MANAGED] .cursorrules`);
 
   // 2. CLAUDE.md
   safeMergeFile(resolve(projectRoot, "CLAUDE.md"));
-  console.log(`  ✓ [MANAGED] CLAUDE.md`);
+  console.log(`  [PASS] [MANAGED] CLAUDE.md`);
 
   // 3. .github/copilot-instructions.md
   const githubDir = resolve(projectRoot, ".github");
   if (!existsSync(githubDir)) mkdirSync(githubDir, { recursive: true });
   safeMergeFile(resolve(githubDir, "copilot-instructions.md"));
-  console.log(`  ✓ [MANAGED] .github/copilot-instructions.md`);
+  console.log(`  [PASS] [MANAGED] .github/copilot-instructions.md`);
 
-  console.log(`\n✅ Agent governance rules successfully integrated without overwriting custom instructions.\n`);
+  console.log(`\n[PASS] Agent governance rules successfully integrated without overwriting custom instructions.\n`);
 }
 
 /**
@@ -462,7 +462,7 @@ ${endTag}`;
 export function installGitHooks(projectRoot = process.cwd()) {
   const gitDir = resolve(projectRoot, ".git");
   if (!existsSync(gitDir)) {
-    console.error(`\n❌ Error: No .git directory found at "${projectRoot}". Run "git init" first.`);
+    console.error(`\n[ERROR] No .git directory found at "${projectRoot}". Run "git init" first.`);
     return false;
   }
 
@@ -472,7 +472,7 @@ export function installGitHooks(projectRoot = process.cwd()) {
   const hookMarker = "# --- GOVERNANCE PRE-COMMIT VERIFICATION ---";
   const governanceSnippet = `
 ${hookMarker}
-echo "🛡️  Running Governance Pre-Commit Verification on project..."
+echo "[INFO] Running Governance Pre-Commit Verification on project..."
 if command -v governance >/dev/null 2>&1; then
   governance check || exit 1
 elif command -v npx >/dev/null 2>&1; then
@@ -486,17 +486,17 @@ fi
   if (existsSync(preCommitPath)) {
     const existingContent = readFileSync(preCommitPath, "utf8");
     if (existingContent.includes(hookMarker)) {
-      console.log(`\nℹ️  Governance hook is already installed in .git/hooks/pre-commit.`);
+      console.log(`\n[INFO] Governance hook is already installed in .git/hooks/pre-commit.`);
       return true;
     }
     // Append to existing hook without overwriting user's tools (e.g. Pint, Husky, Pest)
     writeFileSync(preCommitPath, existingContent.trimEnd() + "\n" + governanceSnippet, "utf8");
-    console.log(`\n✅ Governance verification hook appended to existing .git/hooks/pre-commit`);
+    console.log(`\n[PASS] Governance verification hook appended to existing .git/hooks/pre-commit`);
   } else {
     // Create new executable hook
     const newHook = `#!/usr/bin/env sh\n` + governanceSnippet;
     writeFileSync(preCommitPath, newHook, "utf8");
-    console.log(`\n✅ New Governance Git pre-commit hook installed at .git/hooks/pre-commit`);
+    console.log(`\n[PASS] New Governance Git pre-commit hook installed at .git/hooks/pre-commit`);
   }
 
   try {
