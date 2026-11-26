@@ -161,6 +161,7 @@ export function initDocs(projectName = "Governance Project", targetDocsDir = get
 
 /**
  * Adds a new story to the specification in docs/foundation/02-spec.md.
+ * Checks for duplicate story numbers to prevent accidental overwrites or duplicate entries.
  * @param {number|string} storyNumber
  * @param {string} title
  * @param {string} [targetDocsDir]
@@ -169,6 +170,15 @@ export function addStory(storyNumber, title, targetDocsDir = getDocsDir()) {
   const specPath = resolve(targetDocsDir, "foundation", "02-spec.md");
   if (!existsSync(specPath)) {
     console.error(`\n❌ Error: Specification file not found at "${specPath}". Run "governance init" first.`);
+    return false;
+  }
+
+  let currentContent = readFileSync(specPath, "utf8");
+
+  // Prevent duplicate story definition
+  const storyPattern = new RegExp(`###\\s+Story\\s+${storyNumber}\\b`, "i");
+  if (storyPattern.test(currentContent)) {
+    console.error(`\n❌ Error: Story ${storyNumber} already exists in "${specPath}". Use a new story number.`);
     return false;
   }
 
@@ -188,7 +198,6 @@ export function addStory(storyNumber, title, targetDocsDir = getDocsDir()) {
 | ${storyNumber}.2 | Invalid or malformed inputs | User attempts submission | Request is rejected with a specific domain error |
 `;
 
-  let currentContent = readFileSync(specPath, "utf8");
   currentContent += storyBlock;
   writeFileSync(specPath, currentContent, "utf8");
   console.log(`\n✅ [SUCCESS] Story ${storyNumber} ("${title}") appended to foundation/02-spec.md`);
@@ -362,14 +371,19 @@ export function addThreatModel(
 }
 
 /**
- * Generates AI agent instructions (.cursorrules, CLAUDE.md, and .github/copilot-instructions.md)
+ * Generates AI agent instructions (.cursorrules, CLAUDE.md, and .github/copilot-instructions.md).
+ * Uses managed comment tags to preserve existing user instructions and merge safely.
  * @param {string} [projectRoot]
  */
 export function generateAgentRules(projectRoot = process.cwd()) {
   console.log(`\nGenerating AI Agent Governance Rules in: ${projectRoot}...\n`);
 
-  const rulesContent = `# AI Agent Governance & Engineering Invariants
-# Enforced by @muathrabuouda/ai-governance ("No code without proof")
+  const startTag = "<!-- BEGIN GOVERNANCE INVARIANTS -->";
+  const endTag = "<!-- END GOVERNANCE INVARIANTS -->";
+
+  const managedRules = `${startTag}
+# AI Agent Governance & Engineering Invariants (Managed by ai-governance-engine)
+# Core Law: "No code without proof"
 
 ## 1. Core Principles
 - Spec-First: Never write production code without an explicit specification and acceptance criteria.
@@ -382,23 +396,45 @@ export function generateAgentRules(projectRoot = process.cwd()) {
 - Domain Boundaries: Respect Hexagonal / Clean Architecture boundaries (Ports & Adapters).
 - Design System: Adhere strictly to the 70-20-10 color balance. Never use primary green as a large canvas background.
 - Conventional Commits: Formulate atomic commits strictly following conventional commit standards.
-`;
+${endTag}`;
+
+  /**
+   * Merges managed block into existing file content or creates fresh.
+   * @param {string} filePath
+   */
+  function safeMergeFile(filePath) {
+    if (existsSync(filePath)) {
+      const existing = readFileSync(filePath, "utf8");
+      if (existing.includes(startTag) && existing.includes(endTag)) {
+        // Replace existing managed block
+        const regex = new RegExp(`${startTag}[\\s\\S]*?${endTag}`, "m");
+        const updated = existing.replace(regex, managedRules);
+        writeFileSync(filePath, updated, "utf8");
+      } else {
+        // Append managed block to existing instructions
+        const updated = existing.trimEnd() + "\n\n" + managedRules + "\n";
+        writeFileSync(filePath, updated, "utf8");
+      }
+    } else {
+      writeFileSync(filePath, managedRules + "\n", "utf8");
+    }
+  }
 
   // 1. .cursorrules
-  writeFileSync(resolve(projectRoot, ".cursorrules"), rulesContent, "utf8");
-  console.log(`  ✓ [CREATED] .cursorrules`);
+  safeMergeFile(resolve(projectRoot, ".cursorrules"));
+  console.log(`  ✓ [MANAGED] .cursorrules`);
 
   // 2. CLAUDE.md
-  writeFileSync(resolve(projectRoot, "CLAUDE.md"), rulesContent, "utf8");
-  console.log(`  ✓ [CREATED] CLAUDE.md`);
+  safeMergeFile(resolve(projectRoot, "CLAUDE.md"));
+  console.log(`  ✓ [MANAGED] CLAUDE.md`);
 
   // 3. .github/copilot-instructions.md
   const githubDir = resolve(projectRoot, ".github");
   if (!existsSync(githubDir)) mkdirSync(githubDir, { recursive: true });
-  writeFileSync(resolve(githubDir, "copilot-instructions.md"), rulesContent, "utf8");
-  console.log(`  ✓ [CREATED] .github/copilot-instructions.md`);
+  safeMergeFile(resolve(githubDir, "copilot-instructions.md"));
+  console.log(`  ✓ [MANAGED] .github/copilot-instructions.md`);
 
-  console.log(`\n✅ Agent governance rules successfully generated for Cursor, Claude Code, and Copilot.\n`);
+  console.log(`\n✅ Agent governance rules successfully integrated without overwriting custom instructions.\n`);
 }
 
 /**
