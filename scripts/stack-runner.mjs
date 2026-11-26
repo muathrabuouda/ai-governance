@@ -89,7 +89,7 @@ export function detectStacks(projectRoot = process.cwd()) {
         type: "node",
         hasInstalledDeps: hasNodeModules,
         missingDepsMessage: hasNodeModules ? undefined : "node_modules missing (run npm ci / npm install)",
-        testCmd: hasNodeModules && scripts.test ? { cmd: "npm", args: ["test"] } : undefined,
+        testCmd: scripts.test ? { cmd: "npm", args: ["test"] } : undefined,
         formatCmd: hasNodeModules && scripts.format ? { cmd: "npm", args: ["run", "format"] } : undefined,
         lintCmd: hasNodeModules
           ? scripts.lint

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "profile": "governance-engine",
+  "profile": "standard",
   "gates": {
     "spec_integrity": {
       "name": "Specification & Criteria Lock",
@@ -40,7 +40,7 @@
     "test_suite": {
       "name": "Automated Test Suite",
       "required": true,
-      "on_missing": "warn"
+      "on_missing": "fail"
     },
     "design_system": {
       "name": "UI Design Tokens & System Compliance",

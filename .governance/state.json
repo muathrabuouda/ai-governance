@@ -80,10 +80,35 @@
         "specHash": "e336a4d73b8d170425806794677965f09310a17086d20c14ff550c0beb40479f"
       },
       "hash": "2fa8d2bfc182f4b3e61e3b386b5f3a110c9b79357dc740ed10e67324c6875f6d"
+    },
+    {
+      "index": 3,
+      "timestamp": "2026-11-26T19:42:08.133Z",
+      "action": "APPROVE_SPEC",
+      "author": "Muath R Abu Ouda",
+      "previousHash": "2fa8d2bfc182f4b3e61e3b386b5f3a110c9b79357dc740ed10e67324c6875f6d",
+      "attestation": {
+        "isGit": true,
+        "userName": "Muath R Abu Ouda",
+        "userEmail": "muathrabuouda@hotmail.com",
+        "commitSha": "65d25165eeabbcffbd9fab05f2d9ff8459c7d837",
+        "treeHash": "bb005339bf51cada2489084f63139b5e6c603591",
+        "signatureStatus": "N",
+        "signerName": "",
+        "signerKey": ""
+      },
+      "details": {
+        "addedStories": [],
+        "updatedStories": [],
+        "prunedStories": [],
+        "totalActiveStories": 4,
+        "specHash": "e336a4d73b8d170425806794677965f09310a17086d20c14ff550c0beb40479f"
+      },
+      "hash": "3d921ed93bfdae22d87e74a7d59ad80dbeb701bdd5d598362b79403fa2a83f1f"
     }
   ],
-  "lastVerifiedAt": "2026-11-26T19:39:31.805Z",
-  "lastApprovedAt": "2026-11-26T19:39:31.384Z",
+  "lastVerifiedAt": "2026-11-26T19:42:08.583Z",
+  "lastApprovedAt": "2026-11-26T19:42:08.133Z",
   "lastApprovedBy": "Muath R Abu Ouda",
-  "headAnchor": "803d12403fac50877fccc3f14c93870c58625170e6ed170f672f3078bfff5c38"
+  "headAnchor": "a759a422394172864be688aee525547c3b6f02c35897503bb8061ecd4de741aa"
 }
