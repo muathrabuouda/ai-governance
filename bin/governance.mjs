@@ -112,8 +112,11 @@ const COMMANDS = {
     action: () => installGitHooks(),
   },
   "install:ci": {
-    description: "Generate GitHub Actions CI/CD verification gate (.github/workflows/governance-gate.yml)",
-    action: () => installCiWorkflow(),
+    description: "Generate GitHub Actions CI/CD verification gate: governance install:ci [--force]",
+    action: () => {
+      const isForce = args.includes("--force") || args.includes("-f");
+      installCiWorkflow(process.cwd(), isForce);
+    },
   },
 
   // Verification & Engineering Gates

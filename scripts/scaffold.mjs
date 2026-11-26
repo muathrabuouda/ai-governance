@@ -227,10 +227,22 @@ export function addAdr(title, targetDocsDir = getDocsDir()) {
   if (!existsSync(adrDir)) mkdirSync(adrDir, { recursive: true });
 
   const existingFiles = readdirSync(adrDir).filter((f) => f.endsWith(".md"));
-  const nextNum = String(existingFiles.length + 1).padStart(4, "0");
+  const existingNumbers = existingFiles
+    .map((f) => {
+      const match = f.match(/^([0-9]+)/);
+      return match ? parseInt(match[1], 10) : 0;
+    })
+    .filter((n) => n > 0);
+  const maxNum = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+  const nextNum = String(maxNum + 1).padStart(4, "0");
   const slug = slugify(title);
   const fileName = `${nextNum}-${slug}.md`;
   const destPath = resolve(adrDir, fileName);
+
+  if (existsSync(destPath)) {
+    console.error(`[FAIL] ADR file "${destPath}" already exists.`);
+    return false;
+  }
 
   const templatePath = resolve(templatesRootDir, "foundation", "adr.template.md");
   let content = existsSync(templatePath)
@@ -244,7 +256,7 @@ export function addAdr(title, targetDocsDir = getDocsDir()) {
     .replace(/\{\{DATE\}\}/g, today);
 
   writeFileSync(destPath, content, "utf8");
-  console.log(`\n✅ [CREATED] ADR created at docs/foundation/adr/${fileName}`);
+  console.log(`\n[PASS] [CREATED] ADR created at docs/foundation/adr/${fileName}`);
   return true;
 }
 
@@ -354,6 +366,11 @@ export function addThreatModel(
   const fileName = `story-${storyNumber}.md`;
   const destPath = resolve(threatDir, fileName);
 
+  if (existsSync(destPath)) {
+    console.error(`[FAIL] Threat model for Story ${storyNumber} already exists at "${destPath}".`);
+    return false;
+  }
+
   const templatePath = resolve(templatesRootDir, "lifecycle", "threat-model.template.md");
   let content = existsSync(templatePath)
     ? readFileSync(templatePath, "utf8")
@@ -366,7 +383,7 @@ export function addThreatModel(
     .replace(/\{\{DATE\}\}/g, today);
 
   writeFileSync(destPath, content, "utf8");
-  console.log(`\n✅ [CREATED] Threat model created at docs/lifecycle/threat-model/${fileName}`);
+  console.log(`\n[PASS] [CREATED] Threat model created at docs/lifecycle/threat-model/${fileName}`);
   return true;
 }
 
@@ -495,14 +512,20 @@ fi
  * Generates an automated GitHub Actions CI/CD governance gate workflow in .github/workflows/governance-gate.yml.
  * Installs target stack dependencies (PHP Composer, Node npm, Gradle) before executing the verification gate.
  * @param {string} [projectRoot]
+ * @param {boolean} [force]
  */
-export function installCiWorkflow(projectRoot = process.cwd()) {
+export function installCiWorkflow(projectRoot = process.cwd(), force = false) {
   const workflowsDir = resolve(projectRoot, ".github", "workflows");
   if (!existsSync(workflowsDir)) {
     mkdirSync(workflowsDir, { recursive: true });
   }
 
   const workflowPath = resolve(workflowsDir, "governance-gate.yml");
+
+  if (existsSync(workflowPath) && !force) {
+    console.log(`[WARN] CI workflow already exists at .github/workflows/governance-gate.yml. Use --force to overwrite.`);
+    return false;
+  }
 
   const hasComposer = existsSync(resolve(projectRoot, "composer.json"));
   const hasPackageJson = existsSync(resolve(projectRoot, "package.json"));
