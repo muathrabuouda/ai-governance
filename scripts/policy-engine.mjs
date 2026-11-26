@@ -2,6 +2,7 @@
  * Governance Policy Engine
  * Evaluates gate execution results against declarative project policies.
  * Converts static hardcoded CLI logic into policy-driven invariant evaluation.
+ * Supports dynamic profiles (strict, standard, lenient, or custom) and schema validation.
  *
  * @copyright 2026 Muath R Abu Ouda <muathrabuouda@hotmail.com>
  * @license MIT
@@ -24,12 +25,66 @@ export const GateStatus = {
 };
 
 /**
- * Default strict governance policy.
- * "No code without proof" invariant baseline.
+ * Built-in governance profiles establishing calibrated thresholds.
+ */
+export const BUILTIN_PROFILES = {
+  strict: {
+    name: "strict",
+    description: "Strict Production Policy — Zero tolerance, all 9 gates required, fail on warnings",
+    fail_on_warning: true,
+    gate_overrides: {
+      spec_integrity: { required: true, on_missing: "fail", on_failure: "fail" },
+      threat_modeling: { required: true, on_missing: "fail", on_failure: "fail" },
+      secrets: { required: true, on_missing: "fail", on_failure: "fail" },
+      git_audit: { required: true, on_missing: "fail", on_failure: "fail" },
+      dependencies: { required: true, on_missing: "fail", on_failure: "fail" },
+      formatting: { required: true, on_missing: "fail", on_failure: "fail" },
+      static_analysis: { required: true, on_missing: "fail", on_failure: "fail" },
+      test_suite: { required: true, on_missing: "fail", on_failure: "fail" },
+      design_system: { required: true, on_missing: "fail", on_failure: "fail" },
+    },
+  },
+  standard: {
+    name: "standard",
+    description: "Standard Development Policy — Core gates required, format and linter advise with warnings",
+    fail_on_warning: false,
+    gate_overrides: {
+      spec_integrity: { required: true, on_missing: "fail", on_failure: "fail" },
+      threat_modeling: { required: true, on_missing: "fail", on_failure: "fail" },
+      secrets: { required: true, on_missing: "fail", on_failure: "fail" },
+      git_audit: { required: true, on_missing: "fail", on_failure: "fail" },
+      dependencies: { required: true, on_missing: "warn", on_failure: "fail" },
+      formatting: { required: false, on_missing: "skip", on_failure: "warn" },
+      static_analysis: { required: false, on_missing: "warn", on_failure: "warn" },
+      test_suite: { required: true, on_missing: "fail", on_failure: "fail" },
+      design_system: { required: false, on_missing: "skip", on_failure: "warn" },
+    },
+  },
+  lenient: {
+    name: "lenient",
+    description: "Lenient Prototype Policy — Permissive spike mode, only spec and secrets are blocking",
+    fail_on_warning: false,
+    gate_overrides: {
+      spec_integrity: { required: true, on_missing: "fail", on_failure: "fail" },
+      threat_modeling: { required: false, on_missing: "skip", on_failure: "warn" },
+      secrets: { required: true, on_missing: "fail", on_failure: "fail" },
+      git_audit: { required: false, on_missing: "skip", on_failure: "warn" },
+      dependencies: { required: false, on_missing: "skip", on_failure: "warn" },
+      formatting: { required: false, on_missing: "skip", on_failure: "warn" },
+      static_analysis: { required: false, on_missing: "skip", on_failure: "warn" },
+      test_suite: { required: false, on_missing: "skip", on_failure: "warn" },
+      design_system: { required: false, on_missing: "skip", on_failure: "warn" },
+    },
+  },
+};
+
+/**
+ * Base fallback policy.
  */
 export const DEFAULT_POLICY = {
   version: "1.0.0",
-  profile: "strict",
+  profile: "standard",
+  fail_on_warning: false,
   gates: {
     spec_integrity: {
       name: "Specification & Criteria Lock",
@@ -90,28 +145,109 @@ export const DEFAULT_POLICY = {
 };
 
 /**
- * Loads project governance policy from .governance/policy.json or returns default strict policy.
- * @param {string} [projectRoot]
- * @returns {typeof DEFAULT_POLICY}
+ * Validates policy schema structure and values.
+ * @param {object} policy
+ * @returns {{ valid: boolean, errors: string[] }}
  */
-export function loadPolicy(projectRoot = process.cwd()) {
-  const policyFile = resolve(projectRoot, ".governance", "policy.json");
-  if (existsSync(policyFile)) {
-    try {
-      const custom = JSON.parse(readFileSync(policyFile, "utf8"));
-      return {
-        ...DEFAULT_POLICY,
-        ...custom,
-        gates: {
-          ...DEFAULT_POLICY.gates,
-          ...(custom.gates || {}),
-        },
-      };
-    } catch {
-      // Fallback to default policy on parse failure
+export function validatePolicy(policy) {
+  const errors = [];
+  if (!policy || typeof policy !== "object") {
+    return { valid: false, errors: ["Policy must be a valid JSON object"] };
+  }
+
+  if (!policy.gates || typeof policy.gates !== "object") {
+    errors.push("Policy must define a 'gates' mapping object");
+  } else {
+    for (const [gateKey, gateConfig] of Object.entries(policy.gates)) {
+      if (typeof gateConfig !== "object" || !gateConfig) {
+        errors.push(`Gate '${gateKey}' configuration must be an object`);
+        continue;
+      }
+      if (gateConfig.required !== undefined && typeof gateConfig.required !== "boolean") {
+        errors.push(`Gate '${gateKey}.required' must be a boolean`);
+      }
+      if (gateConfig.on_missing && !["fail", "warn", "skip"].includes(gateConfig.on_missing)) {
+        errors.push(`Gate '${gateKey}.on_missing' must be 'fail', 'warn', or 'skip'`);
+      }
+      if (gateConfig.on_failure && !["fail", "warn"].includes(gateConfig.on_failure)) {
+        errors.push(`Gate '${gateKey}.on_failure' must be 'fail' or 'warn'`);
+      }
     }
   }
-  return DEFAULT_POLICY;
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Loads project governance policy from .governance/policy.json with profile resolution.
+ * Supports overriding profile via parameter (e.g. from --profile=strict).
+ *
+ * @param {string} [projectRoot]
+ * @param {string} [profileOverride]
+ * @returns {typeof DEFAULT_POLICY & { profileDescription: string }}
+ */
+export function loadPolicy(projectRoot = process.cwd(), profileOverride) {
+  let custom = {};
+  const policyFile = resolve(projectRoot, ".governance", "policy.json");
+
+  if (existsSync(policyFile)) {
+    try {
+      custom = JSON.parse(readFileSync(policyFile, "utf8"));
+    } catch (err) {
+      console.warn(`[WARN] Failed to parse .governance/policy.json: ${err.message}. Using default policy.`);
+    }
+  }
+
+  // Determine active profile name
+  const requestedProfile = (profileOverride || custom.profile || "standard").toLowerCase();
+
+  // Find profile definition (built-in or custom user-defined in policy.profiles)
+  const profileDef =
+    BUILTIN_PROFILES[requestedProfile] ||
+    (custom.profiles && custom.profiles[requestedProfile]) ||
+    BUILTIN_PROFILES.standard;
+
+  // Assemble gate configurations: Base -> Custom/Profile Overrides
+  // If profile is explicitly specified via CLI, its overrides take precedence over project custom defaults.
+  const isCliOverride = Boolean(profileOverride);
+  const resolvedGates = {};
+  for (const [key, baseConfig] of Object.entries(DEFAULT_POLICY.gates)) {
+    const profileOverrideConfig = (profileDef.gate_overrides && profileDef.gate_overrides[key]) || {};
+    const customConfig = (custom.gates && custom.gates[key]) || {};
+
+    resolvedGates[key] = isCliOverride
+      ? {
+          ...baseConfig,
+          ...customConfig,
+          ...profileOverrideConfig,
+        }
+      : {
+          ...baseConfig,
+          ...profileOverrideConfig,
+          ...customConfig,
+        };
+  }
+
+  const resolvedPolicy = {
+    version: custom.version || DEFAULT_POLICY.version,
+    profile: requestedProfile,
+    profileDescription: profileDef.description || `${requestedProfile} policy profile`,
+    fail_on_warning:
+      custom.fail_on_warning !== undefined
+        ? Boolean(custom.fail_on_warning)
+        : Boolean(profileDef.fail_on_warning),
+    gates: resolvedGates,
+  };
+
+  const validation = validatePolicy(resolvedPolicy);
+  if (!validation.valid) {
+    console.warn(`[WARN] Policy validation warnings in .governance/policy.json:`);
+    for (const err of validation.errors) {
+      console.warn(`       - ${err}`);
+    }
+  }
+
+  return resolvedPolicy;
 }
 
 /**

@@ -145,16 +145,18 @@ const COMMANDS = {
 
   // Verification & Engineering Gates
   check: {
-    description: "Run complete policy-driven verification pipeline across all detected project stacks",
+    description: "Run complete policy-driven verification pipeline across all detected project stacks: governance check [--profile=strict|standard|lenient]",
     action: () => {
       console.log(`\n================================================================`);
       console.log(`   GOVERNANCE VERIFICATION PIPELINE`);
       console.log(`   Target Workspace: ${process.cwd()}`);
       console.log(`================================================================`);
 
-      const policy = loadPolicy(process.cwd());
+      const profileArg = args.find((a) => a.startsWith("--profile="));
+      const profileOverride = profileArg ? profileArg.replace("--profile=", "").trim() : undefined;
+      const policy = loadPolicy(process.cwd(), profileOverride);
       const stacks = detectStacks(process.cwd());
-      console.log(`[INFO] Active Policy Profile: ${policy.profile}`);
+      console.log(`[INFO] Active Policy Profile: ${policy.profile} (${policy.profileDescription})`);
       console.log(`[INFO] Detected Stacks: ${stacks.map((s) => s.name).join(" + ")}`);
 
       let failed = false;
