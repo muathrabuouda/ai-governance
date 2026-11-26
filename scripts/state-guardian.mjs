@@ -220,12 +220,14 @@ export function calculateBlockHash(block) {
 
 /**
  * Verifies cryptographic integrity of the entire audit hash chain.
- * Validates backward continuity and checks external git tree and git notes anchor if present.
- * @param {object} state
- * @param {string} [projectRoot]
+ * Validates backward continuity, immutable Git Tag anchors, and optional signature enforcement.
+ *
+ * @param {object} state - Governance state object
+ * @param {string} [projectRoot] - Target project root
+ * @param {{ strict?: boolean, requireTagAnchor?: boolean }} [options] - Verification options
  * @returns {{ ok: boolean, violations: string[] }}
  */
-export function verifyAuditChain(state, projectRoot = process.cwd()) {
+export function verifyAuditChain(state, projectRoot = process.cwd(), options = {}) {
   if (!state.auditLog || state.auditLog.length === 0) {
     return { ok: true, violations: [] };
   }
@@ -256,6 +258,16 @@ export function verifyAuditChain(state, projectRoot = process.cwd()) {
       break;
     }
 
+    // In strict mode, enforce that approvals have a verified GPG/SSH signature
+    if (options.strict && block.action === "APPROVE_SPEC") {
+      const sigStatus = block.attestation?.signatureStatus || "N";
+      if (sigStatus !== "G") {
+        violations.push(
+          `Audit log block ${i} (spec approval) lacks a verified cryptographic signature (status: "${sigStatus}"). Strict policy requires verified GPG/SSH signatures.`,
+        );
+      }
+    }
+
     expectedPrevious = block.hash;
   }
 
@@ -271,13 +283,29 @@ export function verifyAuditChain(state, projectRoot = process.cwd()) {
       );
     }
 
-    // Check external Git Note anchor if in a valid Git repo
+    // Cross-verify immutable Git Tag Anchor if in a Git repository
     if (projectRoot) {
       const gitMeta = getGitAttestation(projectRoot);
-      if (gitMeta.isGit && gitMeta.gitNote && gitMeta.gitNote !== state.headAnchor) {
-        violations.push(
-          `External Git Notes anchor mismatch! Recorded Git note ("${gitMeta.gitNote.slice(0, 12)}...") does not match state.json head anchor ("${state.headAnchor.slice(0, 12)}...").`,
-        );
+      if (gitMeta.isGit) {
+        const expectedTag = lastBlock.attestation?.tagAnchor?.tag || `governance/spec-v${lastBlock.index}`;
+        let tagSha = "";
+        try {
+          tagSha = execSync(`git rev-parse -q --verify "refs/tags/${expectedTag}"`, {
+            cwd: projectRoot,
+            stdio: ["ignore", "pipe", "ignore"],
+            encoding: "utf8",
+          }).trim();
+        } catch {
+          // Tag not found
+        }
+
+        if (!tagSha) {
+          if (options.strict || options.requireTagAnchor) {
+            violations.push(
+              `Immutable Git Tag anchor "refs/tags/${expectedTag}" is missing from git object database! Strict policy mandates verified tag anchors.`,
+            );
+          }
+        }
       }
     }
   }
@@ -407,30 +435,99 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
     resolvedAuthor = `${gitMeta.userName} <${gitMeta.userEmail}>`;
   }
 
-  // Check optional authorized-approvers list if configured
+  // 3. Cryptographic Signature & Authorized Approvers Enforcement
   const authFile = resolve(getGovernanceStateDir(projectRoot), "authorized-approvers.json");
+  let authData = null;
   if (existsSync(authFile)) {
     try {
-      const authData = JSON.parse(readFileSync(authFile, "utf8"));
-      const allowed = Array.isArray(authData) ? authData : authData.approvers || [];
-      if (allowed.length > 0) {
-        const matches = allowed.some(
-          (a) =>
-            a.toLowerCase() === resolvedAuthor.toLowerCase() ||
-            (gitMeta.userEmail && a.toLowerCase() === gitMeta.userEmail.toLowerCase()) ||
-            (gitMeta.userName && a.toLowerCase() === gitMeta.userName.toLowerCase()),
-        );
-        if (!matches) {
-          console.error(
-            `[FAIL] Unauthorized approver "${resolvedAuthor}". Signer not listed in authorized-approvers.json.`,
-          );
-          return false;
-        }
-      }
+      authData = JSON.parse(readFileSync(authFile, "utf8"));
     } catch {
-      // Fallback on parse failure
+      // Non-fatal parse fallback
     }
   }
+
+  // Load policy to detect strict signature requirement
+  let isStrictPolicy = Boolean(options.strict);
+  const policyFile = resolve(getGovernanceStateDir(projectRoot), "policy.json");
+  if (!isStrictPolicy && existsSync(policyFile)) {
+    try {
+      const pol = JSON.parse(readFileSync(policyFile, "utf8"));
+      if (pol.profile === "strict" || pol.strictKeyEnforcement) {
+        isStrictPolicy = true;
+      }
+    } catch {
+      // Non-fatal policy parse fallback
+    }
+  }
+
+  const strictKeyEnforcement = Boolean(
+    isStrictPolicy ||
+      authData?.strictKeyEnforcement ||
+      (authData?.allowedKeyFingerprints && authData.allowedKeyFingerprints.length > 0),
+  );
+
+  if (strictKeyEnforcement) {
+    if (!gitMeta.isGit) {
+      console.error("[FAIL] Security Violation: Strict specification approval requires an active Git repository.");
+      return false;
+    }
+
+    if (gitMeta.signatureStatus !== "G") {
+      console.error(
+        `[FAIL] Security Violation: Commit is not signed with a verified cryptographic key (status: "${gitMeta.signatureStatus}"). Strict specification approval requires a valid GPG or SSH commit signature (%G? = G).`,
+      );
+      return false;
+    }
+
+    const allowedKeys = Array.isArray(authData)
+      ? authData
+      : authData?.allowedKeyFingerprints || [];
+
+    if (allowedKeys.length > 0) {
+      if (!gitMeta.signerKey) {
+        console.error(
+          `[FAIL] Security Violation: Signer key fingerprint could not be extracted from commit signature.`,
+        );
+        return false;
+      }
+
+      const keyMatches = allowedKeys.some(
+        (k) => k.toLowerCase() === gitMeta.signerKey.toLowerCase(),
+      );
+
+      if (!keyMatches) {
+        console.error(
+          `[FAIL] Security Violation: Signing key "${gitMeta.signerKey}" (${gitMeta.signerName || "unnamed"}) is not authorized. Key fingerprint is not listed in allowedKeyFingerprints in authorized-approvers.json.`,
+        );
+        return false;
+      }
+    }
+  } else if (authData) {
+    // Non-strict fallback: if authorized approvers list is defined
+    const allowed = Array.isArray(authData) ? authData : authData.approvers || authData.allowedSigners || [];
+    if (allowed.length > 0) {
+      const matches = allowed.some(
+        (a) =>
+          (gitMeta.signerKey && a.toLowerCase() === gitMeta.signerKey.toLowerCase()) ||
+          a.toLowerCase() === resolvedAuthor.toLowerCase() ||
+          (gitMeta.userEmail && a.toLowerCase() === gitMeta.userEmail.toLowerCase()) ||
+          (gitMeta.userName && a.toLowerCase() === gitMeta.userName.toLowerCase()),
+      );
+      if (!matches) {
+        console.error(
+          `[FAIL] Unauthorized approver "${resolvedAuthor}". Signer not listed in authorized-approvers.json.`,
+        );
+        return false;
+      }
+    }
+  }
+
+  const tagName = `governance/spec-v${state.auditLog.length}`;
+  const tagAnchor = {
+    tag: tagName,
+    commitSha: gitMeta.commitSha,
+    treeHash: gitMeta.treeHash,
+  };
 
   const attestation = {
     isGit: gitMeta.isGit,
@@ -441,6 +538,7 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
     signatureStatus: gitMeta.signatureStatus || "N",
     signerName: gitMeta.signerName || "",
     signerKey: gitMeta.signerKey || "",
+    tagAnchor,
   };
 
   const auditBlock = {
@@ -465,15 +563,15 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
   state.lastApprovedBy = resolvedAuthor;
   state.headAnchor = hashText(`${auditBlock.hash}:${attestation.commitSha}:${attestation.treeHash}`);
 
-  // External anchor: record in Git Notes object database under refs/notes/governance
+  // External anchor: record in immutable Git Tag
   if (gitMeta.isGit && gitMeta.commitSha !== "0000000000000000000000000000000000000000") {
     try {
-      execSync(`git notes --ref=governance add -f -m "${state.headAnchor}" HEAD`, {
+      execSync(`git tag -a "${tagName}" -m "Governance Spec Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD -f`, {
         cwd: projectRoot,
         stdio: ["ignore", "ignore", "ignore"],
       });
     } catch {
-      // Non-fatal if git notes is unavailable
+      // Non-fatal if git tag creation fails
     }
   }
 
@@ -618,16 +716,17 @@ export function deprecateStory(
  * Strictly read-only: NEVER approves or registers newly added stories automatically.
  * Correctly respects deprecated and superseded stories without false violations.
  *
- * @param {string} projectRoot
+ * @param {string} [projectRoot]
+ * @param {{ strict?: boolean, requireTagAnchor?: boolean }} [options]
  * @returns {{ ok: boolean, violations: string[] }}
  */
-export function verifyCriteriaIntegrity(projectRoot = process.cwd()) {
+export function verifyCriteriaIntegrity(projectRoot = process.cwd(), options = {}) {
   const blocks = extractCriteriaBlocks(projectRoot);
   const state = loadGovernanceState(projectRoot);
   const violations = [];
 
-  // 1. Verify the cryptographic audit log hash chain and external git notes anchor
-  const chainCheck = verifyAuditChain(state, projectRoot);
+  // 1. Verify the cryptographic audit log hash chain and immutable git tag anchor
+  const chainCheck = verifyAuditChain(state, projectRoot, options);
   if (!chainCheck.ok) {
     return {
       ok: false,

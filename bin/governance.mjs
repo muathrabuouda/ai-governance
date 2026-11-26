@@ -168,7 +168,8 @@ const COMMANDS = {
 
       // 1. Acceptance Criteria Integrity Gate (Spec Lock)
       console.log("\n[STAGE 1/9] Verifying Specification & Acceptance Criteria Integrity...");
-      const criteriaCheck = verifyCriteriaIntegrity(process.cwd());
+      const isStrict = policy.profile === "strict" || Boolean(policy.strictKeyEnforcement);
+      const criteriaCheck = verifyCriteriaIntegrity(process.cwd(), { strict: isStrict });
       const g1 = evaluateGate(
         "spec_integrity",
         {
@@ -402,18 +403,26 @@ const COMMANDS = {
       const designResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-design.mjs"), process.cwd()], {
         stdio: "inherit",
       });
+
+      let g9Status = GateStatus.PASSED;
+      let g9Message = "Design system tokens compliant";
+      if (designResult.status === 2) {
+        g9Status = GateStatus.SKIPPED;
+        g9Message = "No frontend templates or UI stylesheets found (Not Applicable)";
+      } else if (designResult.status !== 0) {
+        g9Status = GateStatus.FAILED;
+        g9Message = "Design system token audit failed";
+      }
+
       const g9 = evaluateGate(
         "design_system",
         {
-          status: designResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
-          message:
-            designResult.status === 0
-              ? "Design system tokens compliant"
-              : "Design system token audit failed",
+          status: g9Status,
+          message: g9Message,
         },
         policy,
       );
-      if (g9.message && designResult.status !== 0) {
+      if (g9.message && designResult.status !== 0 && designResult.status !== 2) {
         console.log(`\n${g9.message}`);
       }
       if (!g9.passed && g9.blocking) failed = true;

@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { describe } from "node:test";
@@ -302,6 +302,50 @@ Some descriptive text without any table.
         const check4 = verifyCriteriaIntegrity(tempDir);
         assert.equal(check4.ok, false);
         assert.ok(check4.violations.some((v) => v.includes("Story 1") && v.includes("deleted")));
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("blocks agent impersonation and unauthorized approvals when strict key enforcement is active", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-attack-test-"));
+      try {
+        const docsDir = join(tempDir, "docs", "foundation");
+        const govDir = join(tempDir, ".governance");
+        mkdirSync(docsDir, { recursive: true });
+        mkdirSync(govDir, { recursive: true });
+
+        // 1. Setup policy and authorized approvers with strict key enforcement
+        writeFileSync(
+          join(govDir, "authorized-approvers.json"),
+          JSON.stringify({
+            strictKeyEnforcement: true,
+            allowedKeyFingerprints: ["4A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B"],
+            allowedSigners: ["Muath R Abu Ouda <muathrabuouda@hotmail.com>"],
+          }),
+          "utf8",
+        );
+
+        const specContent = `# Specification
+### Story 1: Critical Core Feature
+| ID  | Given | When | Then |
+| :-- | :--- | :--- | :--- |
+| 1.1 | Strict condition | Action executed | Deterministic outcome verified |
+`;
+        writeFileSync(join(docsDir, "02-spec.md"), specContent, "utf8");
+
+        // 2. Attack Simulation: An agent alters criteria and attempts to self-approve with forged name/email
+        // Since tempDir has no signed Git commit (%G? is not 'G' or not a git repo), it MUST be rejected
+        const attackResult = approveSpec("Muath R Abu Ouda", {}, tempDir);
+        assert.equal(attackResult, false, "Approval must fail when cryptographic key signature is missing");
+
+        // 3. Ensure no state file was generated or modified
+        assert.equal(existsSync(join(govDir, "state.json")), false, "state.json must not be created on failed approval");
+
+        // 4. Verify that verifyCriteriaIntegrity correctly identifies unapproved specification
+        const integrityCheck = verifyCriteriaIntegrity(tempDir);
+        assert.equal(integrityCheck.ok, false);
+        assert.ok(integrityCheck.violations.some((v) => v.includes("has NOT been approved")));
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
