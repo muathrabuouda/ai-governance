@@ -7,7 +7,7 @@
  * @license MIT
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 /**
@@ -35,47 +35,56 @@ export const DEFAULT_POLICY = {
       name: "Specification & Criteria Lock",
       required: true,
       on_missing: "fail",
+      on_failure: "fail",
     },
     threat_modeling: {
       name: "Threat Model Coverage",
       required: true,
       on_missing: "fail",
+      on_failure: "fail",
     },
     secrets: {
       name: "Secret Leaks & Token Scanning",
       required: true,
       on_missing: "fail",
+      on_failure: "fail",
       enforce_gitleaks_in_ci: true,
     },
     git_audit: {
       name: "Conventional Commit & Git Hygiene",
       required: true,
       on_missing: "fail",
+      on_failure: "fail",
     },
     dependencies: {
       name: "Dependency Version Pinning & Approval",
       required: true,
       on_missing: "fail",
+      on_failure: "fail",
     },
     formatting: {
       name: "Code Formatting",
       required: false,
       on_missing: "skip",
+      on_failure: "warn",
     },
     static_analysis: {
       name: "Static Analysis & Linting",
       required: false,
       on_missing: "warn",
+      on_failure: "warn",
     },
     test_suite: {
       name: "Automated Test Suite",
       required: true,
       on_missing: "fail",
+      on_failure: "fail",
     },
     design_system: {
       name: "UI Design Tokens & System Compliance",
       required: false,
       on_missing: "skip",
+      on_failure: "warn",
     },
   },
 };
@@ -99,7 +108,7 @@ export function loadPolicy(projectRoot = process.cwd()) {
         },
       };
     } catch {
-      // fallback to default
+      // Fallback to default policy on parse failure
     }
   }
   return DEFAULT_POLICY;
@@ -107,6 +116,9 @@ export function loadPolicy(projectRoot = process.cwd()) {
 
 /**
  * Evaluates an individual gate outcome against project policy rules.
+ * Correctly distinguishes between required gates (blocking on failure)
+ * and optional gates (warning only unless on_failure is explicitly "fail").
+ *
  * @param {string} gateKey
  * @param {{ status: string, message?: string }} result
  * @param {typeof DEFAULT_POLICY} [policy]
@@ -117,10 +129,12 @@ export function evaluateGate(gateKey, result, policy = DEFAULT_POLICY) {
     name: gateKey,
     required: false,
     on_missing: "skip",
+    on_failure: "warn",
   };
 
   const status = result.status || GateStatus.FAILED;
 
+  // 1. Gate Passed
   if (status === GateStatus.PASSED) {
     return {
       passed: true,
@@ -130,7 +144,23 @@ export function evaluateGate(gateKey, result, policy = DEFAULT_POLICY) {
     };
   }
 
+  // 2. Gate Failed: Distinguish between required and optional gates
   if (status === GateStatus.FAILED) {
+    const isRequired = Boolean(gateConfig.required);
+    const onFailure = gateConfig.on_failure || (isRequired ? "fail" : "warn");
+    const isBlocking = isRequired || onFailure === "fail";
+
+    if (!isBlocking) {
+      return {
+        passed: true,
+        blocking: false,
+        status: GateStatus.REQUIRES_REVIEW,
+        message: result.message
+          ? `[WARN] ${gateConfig.name} check failed (optional gate, non-blocking): ${result.message}`
+          : `[WARN] ${gateConfig.name} check failed (optional gate, non-blocking)`,
+      };
+    }
+
     return {
       passed: false,
       blocking: true,
@@ -139,8 +169,11 @@ export function evaluateGate(gateKey, result, policy = DEFAULT_POLICY) {
     };
   }
 
+  // 3. Gate Skipped or Not Configured: Check on_missing policy
   if (status === GateStatus.SKIPPED || status === GateStatus.NOT_CONFIGURED) {
-    if (gateConfig.required && gateConfig.on_missing === "fail") {
+    const onMissing = gateConfig.on_missing || (gateConfig.required ? "fail" : "skip");
+
+    if (gateConfig.required && onMissing === "fail") {
       return {
         passed: false,
         blocking: true,
@@ -149,7 +182,7 @@ export function evaluateGate(gateKey, result, policy = DEFAULT_POLICY) {
       };
     }
 
-    if (gateConfig.on_missing === "warn") {
+    if (onMissing === "warn") {
       return {
         passed: true,
         blocking: false,
@@ -166,8 +199,9 @@ export function evaluateGate(gateKey, result, policy = DEFAULT_POLICY) {
     };
   }
 
+  // 4. Gate Requires Review
   if (status === GateStatus.REQUIRES_REVIEW) {
-    const isBlocking = gateConfig.required;
+    const isBlocking = Boolean(gateConfig.required);
     return {
       passed: !isBlocking,
       blocking: isBlocking,
@@ -176,6 +210,7 @@ export function evaluateGate(gateKey, result, policy = DEFAULT_POLICY) {
     };
   }
 
+  // 5. Catch-all unexpected status
   return {
     passed: false,
     blocking: true,

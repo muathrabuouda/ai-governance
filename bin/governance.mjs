@@ -247,6 +247,9 @@ const COMMANDS = {
           console.log(`\n[STAGE 6/9] Verifying Code Formatting (${st.name})...`);
           const res = runStage(`Code Formatting (${st.name})`, st.formatCmd.cmd, st.formatCmd.args, process.cwd());
           const g = evaluateGate("formatting", res, policy);
+          if (g.message && !res.passed) {
+            console.log(`\n${g.message}`);
+          }
           if (!g.passed && g.blocking) failed = true;
         }
       }
@@ -271,6 +274,9 @@ const COMMANDS = {
           console.log(`\n[STAGE 7/9] Running Static Analysis & Lint (${st.name})...`);
           const res = runStage(`Static Analysis (${st.name})`, st.lintCmd.cmd, st.lintCmd.args, process.cwd());
           const g = evaluateGate("static_analysis", res, policy);
+          if (g.message && !res.passed) {
+            console.log(`\n${g.message}`);
+          }
           if (!g.passed && g.blocking) failed = true;
         }
       }
@@ -324,6 +330,9 @@ const COMMANDS = {
         },
         policy,
       );
+      if (g9.message && designResult.status !== 0) {
+        console.log(`\n${g9.message}`);
+      }
       if (!g9.passed && g9.blocking) failed = true;
 
       console.log(`\n================================================================`);
