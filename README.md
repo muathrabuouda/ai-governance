@@ -68,13 +68,14 @@ governance <command> [options]
 | `check` | Multi-stack verification pipeline (Stack test suite, Pint/Prettier format, Static analysis, Secrets scan, Conventional commits, Acceptance Criteria lock). |
 | `status` | Summarizes project governance status, registered ADRs, and active story progression. |
 | `init [title] [--force]` | Initializes the full 3-pillar methodology documentation suite (safe by default, preserves existing files). |
+| `approve:spec [name]` | Formally approves and cryptographically locks Acceptance Criteria into `.governance/state.json` with an audit log. |
 | `new:adr <title>` | Records a new Architecture Decision Record in `docs/foundation/adr/`. |
 | `list:adr` | Lists all Architecture Decision Records and their statuses. |
 | `new:story <id> <title>` | Scaffolds a new user story with acceptance criteria (prevents duplicates). |
 | `new:threat <id> [title]` | Creates a story-level STRIDE threat model in `docs/lifecycle/threat-model/`. |
 | `rules` | Generates managed AI agent instructions (`.cursorrules`, `CLAUDE.md`, Copilot) with safe block merging. |
 | `install:hooks` | Installs Git pre-commit verification hook (preserves existing hooks and enforces real exit codes). |
-| `install:ci` | Generates an unbypassable GitHub Actions CI/CD governance workflow (`.github/workflows/governance-gate.yml`). |
+| `install:ci` | Generates a stack-aware GitHub Actions CI/CD governance workflow (`.github/workflows/governance-gate.yml`). Enforce via GitHub Branch Protection / Rulesets. |
 | `audit:git` | Audits git commits against Conventional Commits standards. |
 | `audit:design` | Audits UI templates for Design System rules (70-20-10 distribution, accent-only green). |
 | `secrets` | Scans repository for exposed API keys, private tokens, and credentials. |

@@ -493,7 +493,7 @@ fi
 
 /**
  * Generates an automated GitHub Actions CI/CD governance gate workflow in .github/workflows/governance-gate.yml.
- * Provides an unbypassable server-side boundary for pull requests and main pushes.
+ * Installs target stack dependencies (PHP Composer, Node npm, Gradle) before executing the verification gate.
  * @param {string} [projectRoot]
  */
 export function installCiWorkflow(projectRoot = process.cwd()) {
@@ -503,6 +503,53 @@ export function installCiWorkflow(projectRoot = process.cwd()) {
   }
 
   const workflowPath = resolve(workflowsDir, "governance-gate.yml");
+
+  const hasComposer = existsSync(resolve(projectRoot, "composer.json"));
+  const hasPackageJson = existsSync(resolve(projectRoot, "package.json"));
+  const hasGradle =
+    existsSync(resolve(projectRoot, "build.gradle")) ||
+    existsSync(resolve(projectRoot, "build.gradle.kts"));
+
+  let stackSteps = "";
+
+  if (hasComposer) {
+    stackSteps += `
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite
+          coverage: none
+
+      - name: Install Composer Dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+`;
+  }
+
+  if (hasPackageJson) {
+    stackSteps += `
+      - name: Install Node Dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+`;
+  }
+
+  if (hasGradle) {
+    stackSteps += `
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x gradlew
+`;
+  }
 
   const workflowContent = `name: AI Governance Verification Gate
 
@@ -531,14 +578,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
+${stackSteps}
       - name: Run AI Governance Verification Gate
         run: |
           npx github:muathrabuouda/ai-governance check
 `;
 
   writeFileSync(workflowPath, workflowContent, "utf8");
-  console.log(`\n✅ Governance CI/CD gate installed at .github/workflows/governance-gate.yml`);
-  console.log(`   Pull requests and commits will now be rigorously verified on GitHub Actions.`);
+  console.log(`\n[PASS] Governance CI workflow installed at .github/workflows/governance-gate.yml`);
+  console.log(`[INFO] Enforce via GitHub repository settings:`);
+  console.log(`       Settings -> Branches -> Add rule (or Rulesets)`);
+  console.log(`       Enable "Require status checks to pass before merging"`);
+  console.log(`       Select required check: "Verification Pipeline & Invariants"\n`);
   return true;
 }
