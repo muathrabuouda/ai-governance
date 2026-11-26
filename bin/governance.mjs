@@ -29,6 +29,7 @@ import {
   verifyCriteriaIntegrity,
   verifyThreatModelCoverage,
   approveSpec,
+  deprecateStory,
   lockCriteria,
 } from "../scripts/state-guardian.mjs";
 
@@ -94,17 +95,34 @@ const COMMANDS = {
     action: () => generateAgentRules(),
   },
   "approve:spec": {
-    description: "Formally approve and lock Acceptance Criteria: governance approve:spec [signer-name]",
+    description: "Formally approve and lock Acceptance Criteria: governance approve:spec [signer-name] [--prune]",
     action: () => {
-      const signer = args.join(" ") || "Engineer";
-      approveSpec(signer, process.cwd());
+      const isPrune = args.includes("--prune");
+      const filtered = args.filter((a) => a !== "--prune");
+      const signer = filtered.join(" ") || "Engineer";
+      approveSpec(signer, { prune: isPrune }, process.cwd());
     },
   },
   "lock:criteria": {
     description: "Alias for approve:spec",
     action: () => {
-      const signer = args.join(" ") || "Engineer";
-      approveSpec(signer, process.cwd());
+      const isPrune = args.includes("--prune");
+      const filtered = args.filter((a) => a !== "--prune");
+      const signer = filtered.join(" ") || "Engineer";
+      approveSpec(signer, { prune: isPrune }, process.cwd());
+    },
+  },
+  "deprecate:story": {
+    description: "Formally deprecate an existing story: governance deprecate:story <number> [reason] [--author=<name>]",
+    action: () => {
+      const [storyNum, ...reasonParts] = args.filter((a) => !a.startsWith("--author="));
+      const authorFlag = args.find((a) => a.startsWith("--author="));
+      const author = authorFlag ? authorFlag.replace("--author=", "") : "Engineer";
+      if (!storyNum) {
+        console.error("Usage: governance deprecate:story <number> [reason] [--author=<name>]");
+        process.exit(1);
+      }
+      deprecateStory(storyNum, reasonParts.join(" ") || "Deprecated by engineer", author, process.cwd());
     },
   },
   "install:hooks": {
@@ -329,7 +347,7 @@ Usage:
 
 Core Architecture & Decision Commands:
 ${Object.entries(COMMANDS)
-  .filter(([cmd]) => ["init", "status", "new:adr", "list:adr", "new:story", "new:threat", "approve:spec", "rules", "install:hooks", "install:ci"].includes(cmd))
+  .filter(([cmd]) => ["init", "status", "new:adr", "list:adr", "new:story", "new:threat", "approve:spec", "deprecate:story", "rules", "install:hooks", "install:ci"].includes(cmd))
   .map(([name, meta]) => `   ${name.padEnd(16)} ${meta.description}`)
   .join("\n")}
 

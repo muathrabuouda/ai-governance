@@ -27,20 +27,32 @@ export function getGovernanceStateDir(projectRoot = process.cwd()) {
 /**
  * Loads current governance state file.
  * @param {string} projectRoot
- * @returns {{ version: string, storyHashes: Record<string, string>, lastVerifiedAt: string, lastApprovedAt?: string, lastApprovedBy?: string, auditLog?: Array<object> }}
+ * @returns {{ version: string, specVersion: string, storyHashes: Record<string, string>, deprecatedStories: Record<string, object>, lastVerifiedAt: string, lastApprovedAt?: string, lastApprovedBy?: string, auditLog: Array<object> }}
  */
 export function loadGovernanceState(projectRoot = process.cwd()) {
   const stateFile = resolve(getGovernanceStateDir(projectRoot), "state.json");
   if (existsSync(stateFile)) {
     try {
-      return JSON.parse(readFileSync(stateFile, "utf8"));
+      const data = JSON.parse(readFileSync(stateFile, "utf8"));
+      return {
+        version: "1.0.0",
+        specVersion: data.specVersion || "1.0.0",
+        storyHashes: data.storyHashes || {},
+        deprecatedStories: data.deprecatedStories || {},
+        auditLog: Array.isArray(data.auditLog) ? data.auditLog : [],
+        lastVerifiedAt: data.lastVerifiedAt || new Date().toISOString(),
+        lastApprovedAt: data.lastApprovedAt,
+        lastApprovedBy: data.lastApprovedBy,
+      };
     } catch {
       // fallback
     }
   }
   return {
     version: "1.0.0",
+    specVersion: "1.0.0",
     storyHashes: {},
+    deprecatedStories: {},
     auditLog: [],
     lastVerifiedAt: new Date().toISOString(),
   };
@@ -57,6 +69,8 @@ export function saveGovernanceState(state, projectRoot = process.cwd()) {
   writeFileSync(stateFile, JSON.stringify(state, null, 2), "utf8");
 }
 
+const GENESIS_PREVIOUS_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
+
 /**
  * Computes sha256 hash of text.
  * @param {string} text
@@ -64,6 +78,62 @@ export function saveGovernanceState(state, projectRoot = process.cwd()) {
  */
 export function hashText(text) {
   return createHash("sha256").update(text.trim()).digest("hex");
+}
+
+/**
+ * Calculates cryptographic hash for an audit log block.
+ * @param {object} block
+ * @returns {string}
+ */
+export function calculateBlockHash(block) {
+  return hashText(
+    `${block.index}:${block.timestamp}:${block.action}:${block.author}:${block.previousHash}:${JSON.stringify(block.details)}`,
+  );
+}
+
+/**
+ * Verifies cryptographic integrity of the entire audit hash chain.
+ * @param {object} state
+ * @returns {{ ok: boolean, violations: string[] }}
+ */
+export function verifyAuditChain(state) {
+  if (!state.auditLog || state.auditLog.length === 0) {
+    return { ok: true, violations: [] };
+  }
+
+  const violations = [];
+  let expectedPrevious = GENESIS_PREVIOUS_HASH;
+
+  for (let i = 0; i < state.auditLog.length; i++) {
+    const block = state.auditLog[i];
+
+    if (block.index !== i) {
+      violations.push(`Audit log block index mismatch at position ${i} (expected ${i}, got ${block.index})`);
+      break;
+    }
+
+    if (block.previousHash !== expectedPrevious) {
+      violations.push(
+        `Audit log hash chain broken at block ${i}! Expected previousHash "${expectedPrevious.slice(0, 12)}...", found "${(block.previousHash || "").slice(0, 12)}..."`,
+      );
+      break;
+    }
+
+    const expectedHash = calculateBlockHash(block);
+    if (block.hash !== expectedHash) {
+      violations.push(
+        `Audit log block ${i} was tampered with! Expected hash "${expectedHash.slice(0, 12)}...", found "${(block.hash || "").slice(0, 12)}..."`,
+      );
+      break;
+    }
+
+    expectedPrevious = block.hash;
+  }
+
+  return {
+    ok: violations.length === 0,
+    violations,
+  };
 }
 
 /**
@@ -100,11 +170,13 @@ export function extractCriteriaBlocks(projectRoot = process.cwd()) {
 /**
  * Formally approves and cryptographically locks Acceptance Criteria into .governance/state.json.
  * Must be invoked explicitly via human approval (governance approve:spec).
- * @param {string} approver
- * @param {string} projectRoot
+ * Appends a tamper-evident block to the audit hash chain.
+ * @param {string} [approver]
+ * @param {{ prune?: boolean }} [options]
+ * @param {string} [projectRoot]
  * @returns {boolean}
  */
-export function approveSpec(approver = "Engineer", projectRoot = process.cwd()) {
+export function approveSpec(approver = "Engineer", options = {}, projectRoot = process.cwd()) {
   const blocks = extractCriteriaBlocks(projectRoot);
   const state = loadGovernanceState(projectRoot);
   const storyCount = Object.keys(blocks).length;
@@ -116,7 +188,9 @@ export function approveSpec(approver = "Engineer", projectRoot = process.cwd()) 
 
   const updatedStories = [];
   const addedStories = [];
+  const prunedStories = [];
 
+  // 1. Process active stories
   for (const [storyNum, criteriaText] of Object.entries(blocks)) {
     const newHash = hashText(criteriaText);
     if (!state.storyHashes[storyNum]) {
@@ -127,21 +201,41 @@ export function approveSpec(approver = "Engineer", projectRoot = process.cwd()) 
     state.storyHashes[storyNum] = newHash;
   }
 
+  // 2. Prune removed stories if explicitly requested
+  if (options.prune) {
+    for (const storyNum of Object.keys(state.storyHashes)) {
+      if (!blocks[storyNum]) {
+        delete state.storyHashes[storyNum];
+        prunedStories.push(storyNum);
+      }
+    }
+  }
+
   if (!state.auditLog) {
     state.auditLog = [];
   }
 
-  const auditEntry = {
-    timestamp: new Date().toISOString(),
-    approvedBy: approver,
-    addedStories,
-    updatedStories,
-    totalStories: storyCount,
-    stateHash: hashText(JSON.stringify(state.storyHashes)),
-  };
+  const previousHash =
+    state.auditLog.length > 0 ? state.auditLog[state.auditLog.length - 1].hash : GENESIS_PREVIOUS_HASH;
 
-  state.auditLog.push(auditEntry);
-  state.lastApprovedAt = auditEntry.timestamp;
+  const auditBlock = {
+    index: state.auditLog.length,
+    timestamp: new Date().toISOString(),
+    action: "APPROVE_SPEC",
+    author: approver,
+    previousHash,
+    details: {
+      addedStories,
+      updatedStories,
+      prunedStories,
+      totalActiveStories: Object.keys(state.storyHashes).length,
+      specHash: hashText(JSON.stringify(state.storyHashes)),
+    },
+  };
+  auditBlock.hash = calculateBlockHash(auditBlock);
+
+  state.auditLog.push(auditBlock);
+  state.lastApprovedAt = auditBlock.timestamp;
   state.lastApprovedBy = approver;
 
   saveGovernanceState(state, projectRoot);
@@ -149,14 +243,77 @@ export function approveSpec(approver = "Engineer", projectRoot = process.cwd()) 
   console.log(`[PASS] Specification locked and approved by "${approver}"`);
   console.log(`       Stories added: ${addedStories.length ? addedStories.join(", ") : "none"}`);
   console.log(`       Stories updated: ${updatedStories.length ? updatedStories.join(", ") : "none"}`);
-  console.log(`       Audit record: .governance/state.json`);
+  if (prunedStories.length > 0) {
+    console.log(`       Stories pruned: ${prunedStories.join(", ")}`);
+  }
+  console.log(`       Audit block ${auditBlock.index} hash: ${auditBlock.hash.slice(0, 16)}...`);
   return true;
 }
 
 export const lockCriteria = approveSpec;
 
 /**
+ * Formally marks a story as deprecated in .governance/state.json with justification.
+ * Appends a tamper-evident DEPRECATE_STORY block to the audit hash chain.
+ * @param {number|string} storyNumber
+ * @param {string} [reason]
+ * @param {string} [author]
+ * @param {string} [projectRoot]
+ * @returns {boolean}
+ */
+export function deprecateStory(
+  storyNumber,
+  reason = "Deprecated by engineer",
+  author = "Engineer",
+  projectRoot = process.cwd(),
+) {
+  const state = loadGovernanceState(projectRoot);
+  if (!state.deprecatedStories) {
+    state.deprecatedStories = {};
+  }
+  const storyKey = String(storyNumber);
+  const wasActive = Boolean(state.storyHashes[storyKey]);
+
+  delete state.storyHashes[storyKey];
+  state.deprecatedStories[storyKey] = {
+    reason,
+    deprecatedAt: new Date().toISOString(),
+    author,
+  };
+
+  const previousHash =
+    state.auditLog && state.auditLog.length > 0
+      ? state.auditLog[state.auditLog.length - 1].hash
+      : GENESIS_PREVIOUS_HASH;
+
+  if (!state.auditLog) state.auditLog = [];
+
+  const auditBlock = {
+    index: state.auditLog.length,
+    timestamp: new Date().toISOString(),
+    action: "DEPRECATE_STORY",
+    author,
+    previousHash,
+    details: {
+      storyNumber: storyKey,
+      reason,
+      wasActive,
+    },
+  };
+  auditBlock.hash = calculateBlockHash(auditBlock);
+
+  state.auditLog.push(auditBlock);
+  saveGovernanceState(state, projectRoot);
+
+  console.log(`[PASS] Story ${storyKey} formally deprecated by "${author}"`);
+  console.log(`       Reason: ${reason}`);
+  console.log(`       Audit block ${auditBlock.index} hash: ${auditBlock.hash.slice(0, 16)}...`);
+  return true;
+}
+
+/**
  * Verifies that no existing locked story criteria has been tampered with or weakened.
+ * Validates the full audit hash chain from genesis to head before checking story hashes.
  * Strictly read-only: NEVER approves or registers newly added stories automatically.
  * @param {string} projectRoot
  * @returns {{ ok: boolean, violations: string[] }}
@@ -166,11 +323,27 @@ export function verifyCriteriaIntegrity(projectRoot = process.cwd()) {
   const state = loadGovernanceState(projectRoot);
   const violations = [];
 
-  // 1. Verify locked stories against current specification
+  // 1. Verify the cryptographic audit log hash chain
+  const chainCheck = verifyAuditChain(state);
+  if (!chainCheck.ok) {
+    return {
+      ok: false,
+      violations: chainCheck.violations,
+    };
+  }
+
+  // 2. Verify locked stories against current specification
   for (const [storyNum, expectedHash] of Object.entries(state.storyHashes)) {
+    // If formally deprecated, skip
+    if (state.deprecatedStories && state.deprecatedStories[storyNum]) {
+      continue;
+    }
+
     const currentBlock = blocks[storyNum];
     if (!currentBlock) {
-      violations.push(`Story ${storyNum}: Acceptance Criteria was deleted from docs/foundation/02-spec.md!`);
+      violations.push(
+        `Story ${storyNum}: Acceptance Criteria was deleted from docs/foundation/02-spec.md without formal deprecation! Run "governance deprecate:story ${storyNum}" to approve removal.`,
+      );
       continue;
     }
     const currentHash = hashText(currentBlock);
@@ -181,7 +354,7 @@ export function verifyCriteriaIntegrity(projectRoot = process.cwd()) {
     }
   }
 
-  // 2. Reject unapproved stories: Any story in spec not yet in state.json is a violation
+  // 3. Reject unapproved stories: Any story in spec not yet in state.json is a violation
   for (const [storyNum] of Object.entries(blocks)) {
     if (!state.storyHashes[storyNum]) {
       violations.push(
