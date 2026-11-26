@@ -2,6 +2,7 @@ name: check
 on: [push, pull_request]
 permissions:
   contents: read
+
 jobs:
   governance:
     name: Multi-Stack Governance Gates
@@ -24,3 +25,36 @@ jobs:
       - run: node bin/governance.mjs check --profile=standard
       - run: node scripts/check-deps.mjs
       - run: node scripts/scan-secrets.mjs
+
+  strict-governance-audit:
+    name: Strict Governance Modification Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Verify Strict Signatures on Governance State or Criteria Changes
+        run: |
+          # Detect whether the pushed commit or PR modified .governance/state.json or docs/foundation/02-spec.md
+          BASE_REF="${{ github.event.before }}"
+          if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
+            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD)
+          else
+            CHANGED_FILES=$(git diff --name-only "$BASE_REF" HEAD 2>/dev/null || git diff-tree --no-commit-id --name-only -r HEAD)
+          fi
+
+          GOV_CHANGES=$(echo "$CHANGED_FILES" | grep -E '^(\.governance/state\.json|docs/foundation/02-spec\.md)' || true)
+
+          if [ -n "$GOV_CHANGES" ]; then
+            echo "[INFO] Governance state or specification files modified in this push:"
+            echo "$GOV_CHANGES"
+            echo "[STAGE] Enforcing strict cryptographic signature verification on governance modification..."
+            node bin/governance.mjs check --profile=strict
+          else
+            echo "[PASS] No governance state or specification modifications detected in this push. Standard profile is sufficient."
+          fi
