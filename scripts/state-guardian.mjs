@@ -295,6 +295,54 @@ export function calculateBlockHash(block) {
 }
 
 /**
+ * Resolves whether strict key enforcement and strict governance invariants are active.
+ * Ensures consistent strictness resolution across both verification gates (check)
+ * and state locking operations (approve:spec).
+ *
+ * @param {string} [projectRoot]
+ * @param {object} [options]
+ * @returns {boolean}
+ */
+export function resolveStrictEnforcement(projectRoot = process.cwd(), options = {}) {
+  if (typeof options.strict === "boolean") {
+    return options.strict;
+  }
+
+  const govDir = getGovernanceStateDir(projectRoot);
+
+  // 1. Check policy.json profile or explicit strictKeyEnforcement flag
+  const policyFile = resolve(govDir, "policy.json");
+  if (existsSync(policyFile)) {
+    try {
+      const pol = JSON.parse(readFileSync(policyFile, "utf8"));
+      if (pol.profile === "strict" || pol.strictKeyEnforcement) {
+        return true;
+      }
+    } catch {
+      // Non-fatal parse fallback
+    }
+  }
+
+  // 2. Check authorized-approvers.json configuration
+  const authFile = resolve(govDir, "authorized-approvers.json");
+  if (existsSync(authFile)) {
+    try {
+      const auth = JSON.parse(readFileSync(authFile, "utf8"));
+      if (auth.strictKeyEnforcement) {
+        return true;
+      }
+      if (Array.isArray(auth.allowedKeyFingerprints) && auth.allowedKeyFingerprints.length > 0) {
+        return true;
+      }
+    } catch {
+      // Non-fatal parse fallback
+    }
+  }
+
+  return false;
+}
+
+/**
  * Verifies cryptographic integrity of the entire audit hash chain.
  * Validates backward continuity, immutable Git Tag anchors, and optional signature enforcement.
  *
@@ -309,6 +357,30 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
   }
 
   const violations = [];
+  const isStrict = resolveStrictEnforcement(projectRoot, options);
+
+  // In strict mode, prevent uncommitted working tree forgery on governance state or specification
+  if (isStrict && projectRoot) {
+    const gitMeta = getGitAttestation(projectRoot);
+    if (gitMeta.isGit) {
+      try {
+        const dirtyDiff = execSync("git diff HEAD -- .governance/state.json docs/foundation/02-spec.md", {
+          cwd: projectRoot,
+          stdio: ["ignore", "pipe", "ignore"],
+          encoding: "utf8",
+        }).trim();
+
+        if (dirtyDiff.length > 0) {
+          violations.push(
+            `Security Violation: Uncommitted working tree modifications detected in .governance/state.json or docs/foundation/02-spec.md. In strict mode, state and criteria must match committed HEAD to prevent uncommitted working-tree forgery.`,
+          );
+        }
+      } catch {
+        // Non-fatal if diff check fails
+      }
+    }
+  }
+
   let expectedPrevious = GENESIS_PREVIOUS_HASH;
 
   for (let i = 0; i < state.auditLog.length; i++) {
@@ -335,7 +407,7 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
     }
 
     // In strict mode, enforce that approvals have a verified GPG/SSH signature
-    if (options.strict && block.action === "APPROVE_SPEC") {
+    if (isStrict && block.action === "APPROVE_SPEC") {
       const sigStatus = block.attestation?.signatureStatus || "N";
       if (sigStatus !== "G") {
         violations.push(
@@ -350,7 +422,7 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
   // Cross-verify state.headAnchor against the latest block attestation
   if (state.auditLog.length > 0) {
     if (!state.headAnchor) {
-      if (options.strict) {
+      if (isStrict) {
         violations.push(
           `Missing "headAnchor" in governance state! Strict policy requires a cryptographically computed headAnchor when an audit log exists.`,
         );
@@ -386,7 +458,7 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
       }
 
       if (!tagSha) {
-        if (options.strict || options.requireTagAnchor) {
+        if (isStrict || options.requireTagAnchor) {
           violations.push(
             `Immutable Git Tag anchor "refs/tags/${expectedTag}" is missing from git object database! Strict policy mandates verified tag anchors.`,
           );
@@ -394,7 +466,7 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
       }
 
       // In strict mode, verify that the commit modifying .governance/state.json is cryptographically signed by an authorized key
-      if (options.strict) {
+      if (isStrict) {
         try {
           const stateCommitData = execSync('git log -1 --format="%H|%G?|%GS|%GK|%GF|%GP" -- .governance/state.json', {
             cwd: projectRoot,
@@ -600,25 +672,8 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
     }
   }
 
-  // Load policy to detect strict signature requirement
-  let isStrictPolicy = Boolean(options.strict);
-  const policyFile = resolve(getGovernanceStateDir(projectRoot), "policy.json");
-  if (!isStrictPolicy && existsSync(policyFile)) {
-    try {
-      const pol = JSON.parse(readFileSync(policyFile, "utf8"));
-      if (pol.profile === "strict" || pol.strictKeyEnforcement) {
-        isStrictPolicy = true;
-      }
-    } catch {
-      // Non-fatal policy parse fallback
-    }
-  }
-
-  const strictKeyEnforcement = Boolean(
-    isStrictPolicy ||
-      authData?.strictKeyEnforcement ||
-      (authData?.allowedKeyFingerprints && authData.allowedKeyFingerprints.length > 0),
-  );
+  // Resolve strict key enforcement using unified policy & approvers resolution
+  const strictKeyEnforcement = resolveStrictEnforcement(projectRoot, options);
 
   // Prevent signature borrowing: in strict mode, verify that docs/foundation/02-spec.md has no uncommitted changes
   if (strictKeyEnforcement && gitMeta.isGit) {

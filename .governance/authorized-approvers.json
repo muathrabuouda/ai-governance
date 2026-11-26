@@ -3,9 +3,7 @@
   "allowedSigners": [
     "Muath R Abu Ouda <muathrabuouda@hotmail.com>"
   ],
-  "allowedKeyFingerprints": [
-    "4AEE18F83AFDEB23"
-  ],
+  "allowedKeyFingerprints": [],
   "allowedGitHubActors": [
     "muathrabuouda"
   ]

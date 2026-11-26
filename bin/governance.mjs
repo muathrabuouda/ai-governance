@@ -31,6 +31,7 @@ import {
   approveSpec,
   deprecateStory,
   lockCriteria,
+  resolveStrictEnforcement,
 } from "../scripts/state-guardian.mjs";
 import { loadPolicy, evaluateGate, GateStatus } from "../scripts/policy-engine.mjs";
 import { generateVerdict, loadLatestVerdict, formatVerdictTerminal } from "../scripts/verdict-engine.mjs";
@@ -172,7 +173,9 @@ const COMMANDS = {
 
       // 1. Acceptance Criteria Integrity Gate (Spec Lock)
       console.log("\n[STAGE 1/9] Verifying Specification & Acceptance Criteria Integrity...");
-      const isStrict = policy.profile === "strict" || Boolean(policy.strictKeyEnforcement);
+      const isStrict = resolveStrictEnforcement(process.cwd(), {
+        strict: profileOverride ? profileOverride === "strict" : (policy.profile === "strict" || Boolean(policy.strictKeyEnforcement) ? true : undefined),
+      });
       const criteriaCheck = verifyCriteriaIntegrity(process.cwd(), { strict: isStrict });
       const g1 = evaluateGate(
         "spec_integrity",
