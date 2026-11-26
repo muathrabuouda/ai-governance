@@ -142,14 +142,18 @@ const COMMANDS = {
       }
 
       // 2. Threat Model Coverage Gate
-      console.log("\n➡️  [GATE 2/8] Auditing Threat Model coverage for active stories...");
+      console.log("\n[STAGE 2/8] Auditing Threat Model coverage for active stories...");
       const threatCheck = verifyThreatModelCoverage(process.cwd());
       if (!threatCheck.ok) {
-        for (const w of threatCheck.warnings) {
-          console.warn(`   ⚠️  ${w}`);
+        for (const v of threatCheck.violations) {
+          console.error(`   [FAIL] ${v}`);
         }
+        failed = true;
       } else {
-        console.log("   ✓ Threat model coverage verified for active stories");
+        if (threatCheck.waived && threatCheck.waived.length > 0) {
+          console.log(`   [INFO] Waived stories with documented exemption: ${threatCheck.waived.join(", ")}`);
+        }
+        console.log("   [PASS] Threat model coverage verified for active stories");
       }
 
       // 3. Secrets Scan in current project

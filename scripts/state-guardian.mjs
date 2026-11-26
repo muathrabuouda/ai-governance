@@ -198,15 +198,34 @@ export function verifyCriteriaIntegrity(projectRoot = process.cwd()) {
 
 /**
  * Verifies that active stories in progress have an associated threat model.
+ * Enforces a strict blocking gate unless an explicit documented waiver exists.
  * @param {string} projectRoot
- * @returns {{ ok: boolean, warnings: string[] }}
+ * @returns {{ ok: boolean, violations: string[], waived: string[] }}
  */
 export function verifyThreatModelCoverage(projectRoot = process.cwd()) {
   const progressPath = resolve(projectRoot, "docs/lifecycle/progress.md");
   const threatDir = resolve(projectRoot, "docs/lifecycle/threat-model");
-  const warnings = [];
+  const violations = [];
+  const waived = [];
 
-  if (!existsSync(progressPath)) return { ok: true, warnings: [] };
+  if (!existsSync(progressPath)) return { ok: true, violations: [], waived: [] };
+
+  // Load documented waivers if present
+  const state = loadGovernanceState(projectRoot);
+  const waiversFile = resolve(getGovernanceStateDir(projectRoot), "waivers.json");
+  let externalWaivers = {};
+  if (existsSync(waiversFile)) {
+    try {
+      externalWaivers = JSON.parse(readFileSync(waiversFile, "utf8"));
+    } catch {
+      // fallback
+    }
+  }
+
+  const activeWaivers = {
+    ...(state.threatModelWaivers || {}),
+    ...(externalWaivers.threatModelWaivers || {}),
+  };
 
   const progressContent = readFileSync(progressPath, "utf8");
   const storyMatches = progressContent.matchAll(/- \[[ xX]\]\s+Story\s+([0-9]+)/gi);
@@ -214,13 +233,22 @@ export function verifyThreatModelCoverage(projectRoot = process.cwd()) {
   for (const match of storyMatches) {
     const storyNum = match[1];
     const threatFile = resolve(threatDir, `story-${storyNum}.md`);
+
+    if (activeWaivers[storyNum]) {
+      waived.push(`Story ${storyNum} (Reason: ${activeWaivers[storyNum]})`);
+      continue;
+    }
+
     if (!existsSync(threatFile)) {
-      warnings.push(`Story ${storyNum} is active in progress.md but missing a Threat Model at docs/lifecycle/threat-model/story-${storyNum}.md`);
+      violations.push(
+        `Story ${storyNum} is active in progress.md but missing a STRIDE Threat Model at docs/lifecycle/threat-model/story-${storyNum}.md`,
+      );
     }
   }
 
   return {
-    ok: warnings.length === 0,
-    warnings,
+    ok: violations.length === 0,
+    violations,
+    waived,
   };
 }
