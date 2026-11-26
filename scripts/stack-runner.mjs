@@ -1,7 +1,8 @@
 /**
  * Multi-Stack Verification & Engineering Gates Runner
  * Automatically detects all stacks present in target project (PHP/Laravel, Node/TS, Android/Gradle, Python)
- * and executes formatting, static analysis, test suites across hybrid projects.
+ * Performs pre-flight availability checks for runners (pest, phpunit, pint, phpstan, npm, pytest, mypy, gradle)
+ * and executes formatting, static analysis, and test suites across hybrid projects.
  *
  * @copyright 2026 Muath R Abu Ouda <muathrabuouda@hotmail.com>
  * @license MIT
@@ -13,7 +14,26 @@ import { resolve } from "node:path";
 import { GateStatus } from "./policy-engine.mjs";
 
 /**
+ * Checks whether an executable command exists in system PATH or target directory.
+ * @param {string} cmd
+ * @param {string} [cwd]
+ * @returns {boolean}
+ */
+export function isExecutableAvailable(cmd, cwd = process.cwd()) {
+  try {
+    const isWindows = process.platform === "win32";
+    const checkCmd = isWindows ? `where "${cmd}"` : `which "${cmd}"`;
+    const res = spawnSync(checkCmd, { cwd, shell: true, stdio: "ignore" });
+    return res.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Detects all software engineering stacks present in target project (supports hybrid stacks).
+ * Performs pre-flight checks on dependencies and tooling availability.
+ *
  * @param {string} projectRoot
  * @returns {Array<object>}
  */
@@ -52,7 +72,7 @@ export function detectStacks(projectRoot = process.cwd()) {
         lintCmd: hasVendor && existsSync(phpstanBin) ? { cmd: phpstanBin, args: ["analyse"] } : undefined,
       });
     } catch {
-      // fallback
+      // Fallback on parse error
     }
   }
 
@@ -80,7 +100,7 @@ export function detectStacks(projectRoot = process.cwd()) {
           : undefined,
       });
     } catch {
-      // fallback
+      // Fallback on parse error
     }
   }
 
@@ -95,22 +115,73 @@ export function detectStacks(projectRoot = process.cwd()) {
       name: "Android / Gradle",
       type: "android",
       hasInstalledDeps: hasWrapper,
-      missingDepsMessage: hasWrapper ? undefined : "gradle wrapper missing",
+      missingDepsMessage: hasWrapper ? undefined : "gradle wrapper missing (run gradle wrapper)",
       testCmd: hasWrapper ? { cmd: resolve(projectRoot, gradleCmd), args: ["test"] } : undefined,
       lintCmd: hasWrapper ? { cmd: resolve(projectRoot, gradleCmd), args: ["lint"] } : undefined,
     });
   }
 
-  // 4. Python
+  // 4. Python (requirements.txt, pyproject.toml, Pipfile, setup.py)
   if (
     existsSync(resolve(projectRoot, "requirements.txt")) ||
-    existsSync(resolve(projectRoot, "pyproject.toml"))
+    existsSync(resolve(projectRoot, "pyproject.toml")) ||
+    existsSync(resolve(projectRoot, "Pipfile")) ||
+    existsSync(resolve(projectRoot, "setup.py"))
   ) {
+    const venvPaths = [
+      resolve(projectRoot, ".venv"),
+      resolve(projectRoot, "venv"),
+      resolve(projectRoot, "env"),
+    ];
+    const hasVenv = venvPaths.some((p) => existsSync(p));
+
+    // Pre-flight check for pytest in venv or system PATH
+    let pytestCmd = undefined;
+    for (const venv of venvPaths) {
+      const venvPytestWin = resolve(venv, "Scripts/pytest.exe");
+      const venvPytestUnix = resolve(venv, "bin/pytest");
+      if (existsSync(venvPytestWin)) {
+        pytestCmd = venvPytestWin;
+        break;
+      }
+      if (existsSync(venvPytestUnix)) {
+        pytestCmd = venvPytestUnix;
+        break;
+      }
+    }
+    if (!pytestCmd && isExecutableAvailable("pytest", projectRoot)) {
+      pytestCmd = "pytest";
+    }
+
+    // Pre-flight check for mypy
+    let mypyCmd = undefined;
+    for (const venv of venvPaths) {
+      const venvMypyWin = resolve(venv, "Scripts/mypy.exe");
+      const venvMypyUnix = resolve(venv, "bin/mypy");
+      if (existsSync(venvMypyWin)) {
+        mypyCmd = venvMypyWin;
+        break;
+      }
+      if (existsSync(venvMypyUnix)) {
+        mypyCmd = venvMypyUnix;
+        break;
+      }
+    }
+    if (!mypyCmd && isExecutableAvailable("mypy", projectRoot)) {
+      mypyCmd = "mypy";
+    }
+
     detected.push({
       name: "Python",
       type: "python",
-      hasInstalledDeps: true,
-      testCmd: { cmd: "pytest", args: [] },
+      hasInstalledDeps: hasVenv,
+      missingDepsMessage: !pytestCmd
+        ? "pytest not found in virtualenv or PATH (run pip install pytest)"
+        : !hasVenv
+        ? "virtualenv not detected (.venv / venv directory missing)"
+        : undefined,
+      testCmd: pytestCmd ? { cmd: pytestCmd, args: [] } : undefined,
+      lintCmd: mypyCmd ? { cmd: mypyCmd, args: ["."] } : undefined,
     });
   }
 
@@ -136,6 +207,8 @@ export function detectStack(projectRoot = process.cwd()) {
 
 /**
  * Runs a shell verification stage and reports structured status.
+ * Gracefully detects missing executables and reports GateStatus.NOT_CONFIGURED.
+ *
  * @param {string} stageName
  * @param {string} cmd
  * @param {string[]} args
@@ -148,8 +221,21 @@ export function runStage(stageName, cmd, args, cwd = process.cwd()) {
     const result = spawnSync(cmd, args, {
       cwd,
       stdio: "inherit",
-      shell: true,
+      shell: process.platform === "win32",
     });
+
+    if (result.error) {
+      if (result.error.code === "ENOENT") {
+        console.warn(`   [WARN] ${stageName}: Executable "${cmd}" not found in PATH.`);
+        return {
+          passed: false,
+          status: GateStatus.NOT_CONFIGURED,
+          message: `${cmd} not found in system PATH`,
+        };
+      }
+      throw result.error;
+    }
+
     const passed = result.status === 0;
     if (passed) {
       console.log(`   [PASS] ${stageName} passed`);

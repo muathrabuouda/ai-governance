@@ -312,11 +312,18 @@ const COMMANDS = {
         }
       }
       if (!anyTestRun) {
+        const missingDetails = stacks
+          .filter((s) => s.missingDepsMessage)
+          .map((s) => `${s.name}: ${s.missingDepsMessage}`)
+          .join("; ");
+        const message = missingDetails
+          ? `No test runner configured in active stack (${missingDetails})`
+          : "No test runner configured in active stack";
         const g = evaluateGate(
           "test_suite",
           {
             status: GateStatus.NOT_CONFIGURED,
-            message: "No test runner configured in active stack",
+            message,
           },
           policy,
         );
