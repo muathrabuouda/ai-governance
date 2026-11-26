@@ -8,15 +8,15 @@
 
 ## Overview
 
-**AI Governance** (codenamed **Governance** / `ai-governance-engine`) is an architectural verification engine and command-line harness designed to govern the end-to-end software engineering lifecycle when collaborating with autonomous AI agents.
+**AI Governance** (codenamed **Governance** / `ai-governance-engine`) is an enterprise-grade architectural verification engine and command-line harness designed to govern the end-to-end software engineering lifecycle when collaborating with autonomous AI agents.
 
-In modern AI-assisted engineering, code generation is rapid, but verification and architectural trust are paramount. AI Governance ensures that every feature, boundary, contract, and decision is backed by verifiable proof:
+In modern AI-assisted engineering, code generation is rapid, but verification and architectural trust are paramount. AI Governance ensures that every feature, boundary, contract, and decision is backed by verifiable cryptographic and static proof:
 
-- **Specification-First Governance:** Domain models, ADRs, and acceptance criteria defined before code generation.
-- **Context Engineering:** Calibrated token budgets, architectural repository maps, and scoped agent rulebooks (`AGENTS.md`).
-- **Trust & Verification:** Mutation testing, contract testing, property-based testing, and secret leak scanning.
-- **Agent Guardrails:** Active hooks preventing unauthorized alterations to tests and safety constraints.
-- **Performance Contracts:** Automated benchmarks detecting N+1 regressions and query explosions.
+- **Policy-Driven Gate Engine:** 9 configurable gates (`.governance/policy.json`) governing acceptance criteria, secrets, dependencies, formatting, static analysis, testing, threat models, design tokens, and git hygiene.
+- **Cryptographic Trust Model:** Tamper-evident SHA-256 hash-chained audit ledger (`state.json`) preventing autonomous agents from altering approved specifications or test criteria.
+- **Hybrid Multi-Stack Detection:** Automatic parallel detection and runner orchestration for hybrid codebases (e.g., Laravel backend + Vue/TypeScript frontend, Python microservices, Android/Gradle).
+- **Specification-First Governance:** Domain models, ADRs, and acceptance criteria formally locked before code generation.
+- **Agent Guardrails:** Pre-commit hooks, Gitleaks CI actions, and scoped rulebooks (`AGENTS.md`, `.cursorrules`, `CLAUDE.md`).
 
 ---
 
@@ -25,11 +25,17 @@ In modern AI-assisted engineering, code generation is rapid, but verification an
 Run instantly anywhere via `npx` directly from GitHub without cloning or manual setup:
 
 ```bash
-# Initialize Governance 3-pillar methodology in any project (Android, iOS, Web, Backend)
+# Initialize Governance 3-pillar methodology in any project
 npx github:muathrabuouda/ai-governance init "My Project"
 
-# Check project governance status & ADRs
+# Check project governance status & policy gates
+npx github:muathrabuouda/ai-governance check
+
+# View governance status summary & ADRs
 npx github:muathrabuouda/ai-governance status
+
+# Formally approve and cryptographically lock acceptance criteria
+npx github:muathrabuouda/ai-governance approve:spec "Muath R Abu Ouda"
 
 # Record a new Architecture Decision Record (ADR)
 npx github:muathrabuouda/ai-governance new:adr "Adopt Clean Architecture"
@@ -42,6 +48,9 @@ npx github:muathrabuouda/ai-governance rules
 
 # Install Git pre-commit enforcement hooks
 npx github:muathrabuouda/ai-governance install:hooks
+
+# Install Stack-Aware GitHub Actions CI Workflow
+npx github:muathrabuouda/ai-governance install:ci
 ```
 
 Or install globally on your development machine:
@@ -53,9 +62,71 @@ governance --help
 
 ---
 
-## Governance CLI (`governance`)
+## Architecture & Trust Model
 
-The CLI provides unified access to all software verification tools:
+### 1. State Guardian Cryptographic Hash Chain
+
+AI agents with workspace write access could theoretically modify acceptance criteria in `docs/foundation/02-spec.md` and simultaneously falsify verification state.
+
+AI Governance solves this via a **tamper-evident cryptographic hash chain** stored in `.governance/state.json`:
+
+1. **Genesis Block:** Block 0 anchors the audit ledger with `previousHash: "0000000000000000000000000000000000000000000000000000000000000000"`.
+2. **Linked Chain:** Every subsequent approval or story deprecation links cryptographically to the preceding block hash:
+   $$\text{hash}_n = \text{SHA256}(n + \text{hash}_{n-1} + \text{timestamp} + \text{approver} + \text{action} + \text{data})$$
+3. **Chain Verification:** `governance check` verifies the full chain integrity from block 0 to the current head on every run. If any block, hash, or criteria text is modified out-of-band, verification immediately halts with an integrity error.
+4. **Story Deprecation:** Obsolete stories can be formally deprecated with audit accountability via:
+   ```bash
+   governance deprecate:story <id> "Replaced by Story 5 in Sprint 3"
+   ```
+5. **Specification Pruning:** When specifications are refactored, pruning removed stories requires explicit human authorization:
+   ```bash
+   governance approve:spec "Muath R Abu Ouda" --prune
+   ```
+
+### 2. Policy-Driven Execution Engine (`policy.json`)
+
+All verification rules are declared in `.governance/policy.json`, allowing teams to customize thresholds per environment (`strict`, `standard`, `lenient`):
+
+```json
+{
+  "profile": "standard",
+  "profiles": {
+    "strict": {
+      "fail_on_warning": true,
+      "require_threat_model": true,
+      "require_clean_git": true
+    },
+    "standard": {
+      "fail_on_warning": false,
+      "require_threat_model": false,
+      "require_clean_git": false
+    }
+  },
+  "gates": {
+    "state_guardian": { "required": true, "on_missing": "fail" },
+    "secrets": { "required": true, "on_missing": "fail" },
+    "git_audit": { "required": true, "on_missing": "skip" },
+    "dependencies": { "required": true, "on_missing": "warn" },
+    "formatting": { "required": false, "on_missing": "skip" },
+    "lint_and_types": { "required": false, "on_missing": "skip" },
+    "test_suite": { "required": true, "on_missing": "warn" },
+    "threat_model": { "required": false, "on_missing": "skip" },
+    "design_audit": { "required": false, "on_missing": "skip" }
+  }
+}
+```
+
+#### Gate Outcome Taxonomy
+Instead of conflating skipped steps with passed results, every gate outputs an explicit outcome:
+- `PASSED`: Gate executed and satisfied all acceptance criteria.
+- `FAILED`: Gate executed and failed checks.
+- `SKIPPED`: Gate skipped intentionally (e.g. no git history or not requested).
+- `NOT_CONFIGURED`: Tool or runner not found in environment (triggers policy evaluation based on `on_missing`).
+- `REQUIRES_REVIEW`: Informational gate requiring human sign-off.
+
+---
+
+## Governance CLI (`governance`)
 
 ```bash
 governance <command> [options]
@@ -65,20 +136,21 @@ governance <command> [options]
 
 | Command | Description |
 | :--- | :--- |
-| `check` | Multi-stack verification pipeline (Stack test suite, Pint/Prettier format, Static analysis, Secrets scan, Conventional commits, Acceptance Criteria lock). |
+| `check` | Multi-stack verification pipeline enforcing all 9 policy gates. |
 | `status` | Summarizes project governance status, registered ADRs, and active story progression. |
-| `init [title] [--force]` | Initializes the full 3-pillar methodology documentation suite (safe by default, preserves existing files). |
-| `approve:spec [name]` | Formally approves and cryptographically locks Acceptance Criteria into `.governance/state.json` with an audit log. |
+| `init [title] [--force]` | Initializes the full 3-pillar methodology documentation suite (safe by default). |
+| `approve:spec [name] [--prune]` | Formally approves and cryptographically locks Acceptance Criteria into `.governance/state.json`. |
+| `deprecate:story <id> [reason]` | Deprecates an approved story in the audit ledger with reason tracking. |
 | `new:adr <title>` | Records a new Architecture Decision Record in `docs/foundation/adr/`. |
 | `list:adr` | Lists all Architecture Decision Records and their statuses. |
 | `new:story <id> <title>` | Scaffolds a new user story with acceptance criteria (prevents duplicates). |
 | `new:threat <id> [title]` | Creates a story-level STRIDE threat model in `docs/lifecycle/threat-model/`. |
-| `rules` | Generates managed AI agent instructions (`.cursorrules`, `CLAUDE.md`, Copilot) with safe block merging. |
-| `install:hooks` | Installs Git pre-commit verification hook (preserves existing hooks and enforces real exit codes). |
-| `install:ci` | Generates a stack-aware GitHub Actions CI/CD governance workflow (`.github/workflows/governance-gate.yml`). Enforce via GitHub Branch Protection / Rulesets. |
+| `rules` | Generates managed AI agent instructions (`.cursorrules`, `CLAUDE.md`, Copilot). |
+| `install:hooks` | Installs Git pre-commit verification hook (preserves existing hooks with real exit codes). |
+| `install:ci` | Generates stack-aware GitHub Actions workflow (`.github/workflows/governance-gate.yml`) with Gitleaks. |
 | `audit:git` | Audits git commits against Conventional Commits standards. |
 | `audit:design` | Audits UI templates for Design System rules (70-20-10 distribution, accent-only green). |
-| `secrets` | Scans repository for exposed API keys, private tokens, and credentials. |
+| `secrets` | Scans repository for exposed API keys, private tokens, and credentials (with allowlist support). |
 | `deps` | Verifies that all dependencies are strictly pinned and security-approved. |
 | `map` | Generates a structured repository architectural map (`docs/repo-map.md`). |
 | `prompt [phase]` | Displays engineering prompts across the 13 methodology phases (00 to 12). |
@@ -87,7 +159,7 @@ governance <command> [options]
 
 ## The 13-Stage AI Engineering Methodology
 
-AI Governance includes a complete prompt library for guiding autonomous agents through structured engineering stages:
+AI Governance provides a complete prompt library guiding autonomous agents through structured engineering stages:
 
 ```text
 prompts/
