@@ -3,6 +3,7 @@
 /**
  * Governance CLI Entrypoint
  * The AI-Native Software Engineering & Verification Platform
+ * "No code without proof"
  *
  * @copyright 2026 Muath R Abu Ouda <muathrabuouda@hotmail.com>
  * @license MIT
@@ -12,7 +13,16 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { initDocs, addStory, addAdr, addThreatModel } from "../scripts/scaffold.mjs";
+import {
+  initDocs,
+  addStory,
+  addAdr,
+  listAdrs,
+  getStatus,
+  addThreatModel,
+  generateAgentRules,
+  installGitHooks,
+} from "../scripts/scaffold.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -20,6 +30,65 @@ const rootDir = resolve(__dirname, "..");
 const [, , command, ...args] = process.argv;
 
 const COMMANDS = {
+  // Scaffolding & Decisions
+  init: {
+    description: "Initialize 3-pillar methodology docs in target project: governance init [title]",
+    action: () => {
+      const title = args.join(" ") || "New Project";
+      initDocs(title);
+    },
+  },
+  status: {
+    description: "Show project governance status (ADRs, Stories, Rules, Verification)",
+    action: () => getStatus(),
+  },
+  "new:adr": {
+    description: "Record a new Architecture Decision Record: governance new:adr <title>",
+    action: () => {
+      const title = args.join(" ");
+      if (!title) {
+        console.error("Usage: governance new:adr <title>");
+        process.exit(1);
+      }
+      addAdr(title);
+    },
+  },
+  "list:adr": {
+    description: "List all Architecture Decision Records and their statuses",
+    action: () => listAdrs(),
+  },
+  "new:story": {
+    description: "Scaffold a new story with acceptance criteria: governance new:story <number> <title>",
+    action: () => {
+      const [num, ...titleParts] = args;
+      if (!num || titleParts.length === 0) {
+        console.error("Usage: governance new:story <number> <title>");
+        process.exit(1);
+      }
+      addStory(num, titleParts.join(" "));
+    },
+  },
+  "new:threat": {
+    description: "Create a one-page threat model: governance new:threat <story-number> [title]",
+    action: () => {
+      const [num, ...titleParts] = args;
+      if (!num) {
+        console.error("Usage: governance new:threat <story-number> [title]");
+        process.exit(1);
+      }
+      addThreatModel(num, titleParts.join(" ") || undefined);
+    },
+  },
+  rules: {
+    description: "Generate agent instructions (.cursorrules, CLAUDE.md, Copilot)",
+    action: () => generateAgentRules(),
+  },
+  "install:hooks": {
+    description: "Install Git pre-commit enforcement hooks in current repository",
+    action: () => installGitHooks(),
+  },
+
+  // Verification & Testing
   check: {
     description: "Run full verification pipeline across platform and golden project",
     action: () => runNpmScript("check"),
@@ -64,46 +133,8 @@ const COMMANDS = {
     description: "Audit UI templates for Design System rules (palette, 70-20-10, no green bg)",
     action: () => runScript("scripts/audit-design.mjs", args),
   },
-  init: {
-    description: "Initialize Governance methodology documentation suite: governance init [title]",
-    action: () => {
-      const title = args.join(" ") || "New Project";
-      initDocs(title);
-    },
-  },
-  "new:story": {
-    description: "Scaffold a new story with acceptance criteria: governance new:story <number> <title>",
-    action: () => {
-      const [num, ...titleParts] = args;
-      if (!num || titleParts.length === 0) {
-        console.error("Usage: governance new:story <number> <title>");
-        process.exit(1);
-      }
-      addStory(num, titleParts.join(" "));
-    },
-  },
-  "new:adr": {
-    description: "Create a new Architecture Decision Record: governance new:adr <title>",
-    action: () => {
-      const title = args.join(" ");
-      if (!title) {
-        console.error("Usage: governance new:adr <title>");
-        process.exit(1);
-      }
-      addAdr(title);
-    },
-  },
-  "new:threat": {
-    description: "Create a one-page threat model: governance new:threat <story-number> [title]",
-    action: () => {
-      const [num, ...titleParts] = args;
-      if (!num) {
-        console.error("Usage: governance new:threat <story-number> [title]");
-        process.exit(1);
-      }
-      addThreatModel(num, titleParts.join(" ") || undefined);
-    },
-  },
+
+  // Methodology Prompts
   prompt: {
     description: "Browse or display engineering prompts across the 13 methodology phases (00 to 12)",
     action: () => {
@@ -158,16 +189,29 @@ function printHelp() {
 ================================================================
 
 Usage:
-  governance <command> [options]
+   governance <command> [options]
 
-Available Commands:
+Core Architecture & Decision Commands:
 ${Object.entries(COMMANDS)
-  .map(([name, meta]) => `  ${name.padEnd(12)} ${meta.description}`)
+  .filter(([cmd]) => ["init", "status", "new:adr", "list:adr", "new:story", "new:threat", "rules", "install:hooks"].includes(cmd))
+  .map(([name, meta]) => `   ${name.padEnd(16)} ${meta.description}`)
+  .join("\n")}
+
+Verification & Engineering Gates:
+${Object.entries(COMMANDS)
+  .filter(([cmd]) => ["check", "test", "mutate", "audit:git", "audit:design", "secrets", "deps", "bench", "map", "context"].includes(cmd))
+  .map(([name, meta]) => `   ${name.padEnd(16)} ${meta.description}`)
+  .join("\n")}
+
+Methodology & Prompts:
+${Object.entries(COMMANDS)
+  .filter(([cmd]) => ["prompt", "story"].includes(cmd))
+  .map(([name, meta]) => `   ${name.padEnd(16)} ${meta.description}`)
   .join("\n")}
 
 Options:
-  --help, -h     Show this help guide
-  --version, -v  Print Governance engine version
+   --help, -h     Show this help guide
+   --version, -v  Print Governance engine version
 `);
 }
 

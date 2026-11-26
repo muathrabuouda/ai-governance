@@ -4,7 +4,6 @@
   "description": "AI-Native Software Engineering & Verification Platform for Autonomous Agents and Developers",
   "type": "module",
   "bin": {
-    "governance": "./bin/governance.mjs",
     "governance": "./bin/governance.mjs"
   },
   "homepage": "https://github.com/muathrabuouda/ai-governance",
@@ -16,7 +15,6 @@
     "url": "https://github.com/muathrabuouda/ai-governance/issues"
   },
   "scripts": {
-    "governance": "node ./bin/governance.mjs",
     "governance": "node ./bin/governance.mjs",
     "format": "prettier --check .",
     "lint": "eslint .",
