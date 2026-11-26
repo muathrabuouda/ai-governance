@@ -39,12 +39,17 @@ jobs:
           git config user.email "governance@muathrabuouda.local"
 
       - name: Cryptographically Lock Acceptance Criteria
+        env:
+          APPROVER_NAME: ${{ inputs.approver_name }}
+          APPROVAL_REASON: ${{ inputs.reason }}
         run: |
-          node bin/governance.mjs approve:spec "${{ inputs.approver_name }}"
+          node bin/governance.mjs approve:spec "$APPROVER_NAME"
 
       - name: Commit State and Push Immutable Tag
+        env:
+          APPROVER_NAME: ${{ inputs.approver_name }}
         run: |
           git add .governance/state.json
-          git commit -m "chore(spec): lock acceptance criteria approved by ${{ inputs.approver_name }} [skip ci]" || echo "No state changes"
+          git commit -m "chore(spec): lock acceptance criteria approved by $APPROVER_NAME [skip ci]" || echo "No state changes"
           git push origin HEAD:main
           git push origin --tags
