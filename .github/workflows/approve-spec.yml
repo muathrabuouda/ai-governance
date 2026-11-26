@@ -1,3 +1,14 @@
+# ==============================================================================
+# SECURITY ARCHITECTURE: ENVIRONMENT SECRETS & HUMAN APPROVAL GATE
+# To prevent autonomous agents from borrowing or exfiltrating signing credentials,
+# GPG_PRIVATE_KEY and GPG_PASSPHRASE MUST be configured as Environment Secrets
+# exclusively under the protected environment 'governance-approval'.
+#
+# Environment Settings Required in GitHub Repository:
+# 1. Required Reviewers: only authorized human maintainers can approve workflow runs.
+# 2. Deployment branches: restricted to 'main'.
+# ==============================================================================
+
 name: Approve Specification
 
 on:
@@ -50,7 +61,7 @@ jobs:
             console.log(`[PASS] GitHub Actor "${actor}" verified and authorized.`);
           '
 
-      - name: Configure GPG Signing Key (if secret provided)
+      - name: Configure GPG Signing Key & Ultimate Ownertrust (if environment secret provided)
         env:
           GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -58,11 +69,18 @@ jobs:
           if [ -n "$GPG_KEY" ]; then
             echo "$GPG_KEY" | gpg --batch --import
             KEY_ID=$(gpg --list-secret-keys --keyid-format=long | grep sec | head -1 | awk '{print $2}' | cut -d'/' -f2)
+            FINGERPRINT=$(gpg --list-secret-keys --with-colons | grep fpr | head -1 | cut -d':' -f10)
+            
+            # Set ultimate ownertrust (level 6) so git verify-commit sees %G? as 'G' instead of 'U' (untrusted key)
+            if [ -n "$FINGERPRINT" ]; then
+              echo "${FINGERPRINT}:6:" | gpg --import-ownertrust
+            fi
+
             git config --global user.signingkey "$KEY_ID"
             git config --global commit.gpgsign true
-            echo "GPG Signing Key configured: $KEY_ID"
+            echo "[PASS] GPG Key configured with ultimate ownertrust: $KEY_ID (fpr: $FINGERPRINT)"
           else
-            echo "[INFO] No GPG_PRIVATE_KEY secret configured in repository."
+            echo "[INFO] No GPG_PRIVATE_KEY secret configured in governance-approval environment."
           fi
 
       - name: Configure Git Committer Identity
