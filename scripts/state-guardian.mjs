@@ -132,7 +132,8 @@ export function getGitAttestation(projectRoot = process.cwd()) {
 
     let treeHash = "";
     try {
-      treeHash = execSync("git rev-parse HEAD^{tree}", {
+      // Use git log format="%T" to extract tree hash cross-platform without shell escaping issues
+      treeHash = execSync('git log -1 --format="%T"', {
         cwd: projectRoot,
         stdio: ["ignore", "pipe", "ignore"],
         encoding: "utf8",
@@ -141,12 +142,44 @@ export function getGitAttestation(projectRoot = process.cwd()) {
       treeHash = "0000000000000000000000000000000000000000";
     }
 
+    let signatureStatus = "N";
+    let signerName = "";
+    let signerKey = "";
+    try {
+      const sigData = execSync('git log -1 --format="%G?|%GS|%GK"', {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+      }).trim();
+      const parts = sigData.split("|");
+      signatureStatus = parts[0] || "N";
+      signerName = parts[1] || "";
+      signerKey = parts[2] || "";
+    } catch {
+      // Non-fatal if git signature check fails
+    }
+
+    let gitNote = "";
+    try {
+      gitNote = execSync("git notes --ref=governance show HEAD", {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+      }).trim();
+    } catch {
+      // Non-fatal if no governance note exists
+    }
+
     return {
       isGit: true,
       userName: userName || "Unknown Committer",
       userEmail: userEmail || "unknown@local",
       commitSha,
-      treeHash,
+      treeHash: treeHash || "0000000000000000000000000000000000000000",
+      signatureStatus,
+      signerName,
+      signerKey,
+      gitNote,
     };
   } catch {
     return {
@@ -155,6 +188,10 @@ export function getGitAttestation(projectRoot = process.cwd()) {
       userEmail: "non-git@local",
       commitSha: "0000000000000000000000000000000000000000",
       treeHash: "0000000000000000000000000000000000000000",
+      signatureStatus: "N",
+      signerName: "",
+      signerKey: "",
+      gitNote: "",
     };
   }
 }
@@ -183,11 +220,12 @@ export function calculateBlockHash(block) {
 
 /**
  * Verifies cryptographic integrity of the entire audit hash chain.
- * Validates backward continuity and checks external git tree anchor if present.
+ * Validates backward continuity and checks external git tree and git notes anchor if present.
  * @param {object} state
+ * @param {string} [projectRoot]
  * @returns {{ ok: boolean, violations: string[] }}
  */
-export function verifyAuditChain(state) {
+export function verifyAuditChain(state, projectRoot = process.cwd()) {
   if (!state.auditLog || state.auditLog.length === 0) {
     return { ok: true, violations: [] };
   }
@@ -231,6 +269,16 @@ export function verifyAuditChain(state) {
       violations.push(
         `Audit log head anchor mismatch! Tampering detected between state.json and external git tree anchor.`,
       );
+    }
+
+    // Check external Git Note anchor if in a valid Git repo
+    if (projectRoot) {
+      const gitMeta = getGitAttestation(projectRoot);
+      if (gitMeta.isGit && gitMeta.gitNote && gitMeta.gitNote !== state.headAnchor) {
+        violations.push(
+          `External Git Notes anchor mismatch! Recorded Git note ("${gitMeta.gitNote.slice(0, 12)}...") does not match state.json head anchor ("${state.headAnchor.slice(0, 12)}...").`,
+        );
+      }
     }
   }
 
@@ -390,6 +438,9 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
     userEmail: gitMeta.userEmail,
     commitSha: gitMeta.commitSha,
     treeHash: gitMeta.treeHash,
+    signatureStatus: gitMeta.signatureStatus || "N",
+    signerName: gitMeta.signerName || "",
+    signerKey: gitMeta.signerKey || "",
   };
 
   const auditBlock = {
@@ -413,6 +464,18 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
   state.lastApprovedAt = auditBlock.timestamp;
   state.lastApprovedBy = resolvedAuthor;
   state.headAnchor = hashText(`${auditBlock.hash}:${attestation.commitSha}:${attestation.treeHash}`);
+
+  // External anchor: record in Git Notes object database under refs/notes/governance
+  if (gitMeta.isGit && gitMeta.commitSha !== "0000000000000000000000000000000000000000") {
+    try {
+      execSync(`git notes --ref=governance add -f -m "${state.headAnchor}" HEAD`, {
+        cwd: projectRoot,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+    } catch {
+      // Non-fatal if git notes is unavailable
+    }
+  }
 
   saveGovernanceState(state, projectRoot);
 
@@ -502,6 +565,9 @@ export function deprecateStory(
     userEmail: gitMeta.userEmail,
     commitSha: gitMeta.commitSha,
     treeHash: gitMeta.treeHash,
+    signatureStatus: gitMeta.signatureStatus || "N",
+    signerName: gitMeta.signerName || "",
+    signerKey: gitMeta.signerKey || "",
   };
 
   const auditBlock = {
@@ -522,6 +588,19 @@ export function deprecateStory(
 
   state.auditLog.push(auditBlock);
   state.headAnchor = hashText(`${auditBlock.hash}:${attestation.commitSha}:${attestation.treeHash}`);
+
+  // External anchor: record in Git Notes object database under refs/notes/governance
+  if (gitMeta.isGit && gitMeta.commitSha !== "0000000000000000000000000000000000000000") {
+    try {
+      execSync(`git notes --ref=governance add -f -m "${state.headAnchor}" HEAD`, {
+        cwd: projectRoot,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+    } catch {
+      // Non-fatal if git notes is unavailable
+    }
+  }
+
   saveGovernanceState(state, projectRoot);
 
   console.log(`[PASS] Story ${storyKey} formally deprecated by "${resolvedAuthor}"`);
@@ -547,8 +626,8 @@ export function verifyCriteriaIntegrity(projectRoot = process.cwd()) {
   const state = loadGovernanceState(projectRoot);
   const violations = [];
 
-  // 1. Verify the cryptographic audit log hash chain
-  const chainCheck = verifyAuditChain(state);
+  // 1. Verify the cryptographic audit log hash chain and external git notes anchor
+  const chainCheck = verifyAuditChain(state, projectRoot);
   if (!chainCheck.ok) {
     return {
       ok: false,

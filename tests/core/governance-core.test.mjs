@@ -25,6 +25,7 @@ import {
   approveSpec,
   calculateBlockHash,
   deprecateStory,
+  getGitAttestation,
   getGovernanceStateDir,
   hashText,
   loadGovernanceState,
@@ -212,6 +213,17 @@ describe("Governance Core Integration Tests", () => {
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
+    });
+
+    test("retrieves valid git attestation with non-zero tree hash and signature status", () => {
+      const gitMeta = getGitAttestation(process.cwd());
+      assert.equal(gitMeta.isGit, true);
+      assert.ok(gitMeta.commitSha.length === 40);
+      assert.notEqual(gitMeta.commitSha, "0000000000000000000000000000000000000000");
+      // Tree hash must be real 40-char hex, NOT the Windows failure default
+      assert.ok(gitMeta.treeHash.length === 40);
+      assert.notEqual(gitMeta.treeHash, "0000000000000000000000000000000000000000");
+      assert.ok(typeof gitMeta.signatureStatus === "string");
     });
 
     test("captures full acceptance criteria tables and detects cell mutation or row deletion", () => {

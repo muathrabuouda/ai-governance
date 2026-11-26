@@ -91,6 +91,9 @@ export function generateVerdict(
       userEmail: gitMeta.userEmail,
       commitSha: gitMeta.commitSha,
       treeHash: gitMeta.treeHash,
+      signatureStatus: gitMeta.signatureStatus || "N",
+      signerName: gitMeta.signerName || "",
+      signerKey: gitMeta.signerKey || "",
       stateHeadAnchor: state.headAnchor || "unanchored",
     },
     policy: {
@@ -181,6 +184,14 @@ export function generateReportMarkdown(verdict) {
 
   const stackList = verdict.stacks.map((s) => `- **${s.name}** (${s.type})`).join("\n");
 
+  const sigStatus = verdict.attestation.signatureStatus || "N";
+  const sigDescription =
+    sigStatus === "G"
+      ? `Valid (Signed by ${verdict.attestation.signerName || "Verified Key"} [${verdict.attestation.signerKey || "GPG/SSH"}])`
+      : sigStatus === "N"
+        ? "Unsigned"
+        : `Status ${sigStatus}`;
+
   return `# Governance Verification Report
 
 > **Verdict:** **${badgeMap[verdict.verdict] || verdict.verdict}**  
@@ -194,6 +205,7 @@ export function generateReportMarkdown(verdict) {
 
 - **Committer:** ${verdict.attestation.userName} <${verdict.attestation.userEmail}>
 - **Git Commit:** \`${verdict.attestation.commitSha.slice(0, 10)}\` (Tree: \`${verdict.attestation.treeHash.slice(0, 10)}\`)
+- **Commit Signature:** ${sigDescription}
 - **State Head Anchor:** \`${verdict.attestation.stateHeadAnchor.slice(0, 16)}...\`
 - **Policy Profile:** \`${verdict.policy.profile}\` (Fail on warning: ${verdict.policy.failOnWarning})
 
