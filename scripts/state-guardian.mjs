@@ -144,9 +144,11 @@ export function getGitAttestation(projectRoot = process.cwd()) {
 
     let signatureStatus = "N";
     let signerName = "";
-    let signerKey = "";
+    let signerKeyId = "";
+    let signerFingerprint = "";
+    let primaryFingerprint = "";
     try {
-      const sigData = execSync('git log -1 --format="%G?|%GS|%GK"', {
+      const sigData = execSync('git log -1 --format="%G?|%GS|%GK|%GF|%GP"', {
         cwd: projectRoot,
         stdio: ["ignore", "pipe", "ignore"],
         encoding: "utf8",
@@ -154,10 +156,14 @@ export function getGitAttestation(projectRoot = process.cwd()) {
       const parts = sigData.split("|");
       signatureStatus = parts[0] || "N";
       signerName = parts[1] || "";
-      signerKey = parts[2] || "";
+      signerKeyId = parts[2] || "";
+      signerFingerprint = parts[3] || "";
+      primaryFingerprint = parts[4] || "";
     } catch {
       // Non-fatal if git signature check fails
     }
+
+    const signerKey = signerFingerprint || primaryFingerprint || signerKeyId || "";
 
     let gitNote = "";
     try {
@@ -179,6 +185,9 @@ export function getGitAttestation(projectRoot = process.cwd()) {
       signatureStatus,
       signerName,
       signerKey,
+      signerKeyId,
+      signerFingerprint,
+      primaryFingerprint,
       gitNote,
     };
   } catch {
@@ -191,9 +200,66 @@ export function getGitAttestation(projectRoot = process.cwd()) {
       signatureStatus: "N",
       signerName: "",
       signerKey: "",
+      signerKeyId: "",
+      signerFingerprint: "",
+      primaryFingerprint: "",
       gitNote: "",
     };
   }
+}
+
+/**
+ * Normalizes a cryptographic key fingerprint or key ID for strict comparison.
+ * Strips whitespace, colons, and leading 0x prefixes.
+ *
+ * @param {string} key
+ * @returns {string} Normalized lowercase key string
+ */
+export function normalizeKey(key) {
+  if (typeof key !== "string") return "";
+  return key.replace(/[\s:]+/g, "").replace(/^0x/i, "").toLowerCase();
+}
+
+/**
+ * Checks whether a commit's signer key matches an allowed list of fingerprints or key IDs.
+ * Correctly matches full fingerprints (40 hex chars), primary key fingerprints, and key IDs.
+ *
+ * @param {object} gitMeta
+ * @param {string[]} allowedKeys
+ * @returns {boolean}
+ */
+export function isKeyFingerprintAuthorized(gitMeta, allowedKeys = []) {
+  if (!allowedKeys || allowedKeys.length === 0) return true;
+
+  const candidateKeys = [
+    normalizeKey(gitMeta.signerFingerprint),
+    normalizeKey(gitMeta.primaryFingerprint),
+    normalizeKey(gitMeta.signerKeyId),
+    normalizeKey(gitMeta.signerKey),
+  ].filter(Boolean);
+
+  if (candidateKeys.length === 0) return false;
+
+  for (const rawAllowed of allowedKeys) {
+    const allowed = normalizeKey(rawAllowed);
+    if (!allowed) continue;
+
+    for (const candidate of candidateKeys) {
+      if (candidate === allowed) {
+        return true;
+      }
+      // If allowed is full fingerprint (40 hex) and candidate is key ID (8 or 16 hex), match suffix
+      if (allowed.length >= 16 && candidate.length >= 8 && allowed.endsWith(candidate)) {
+        return true;
+      }
+      // If candidate is full fingerprint (40 hex) and allowed is key ID (8 or 16 hex), match suffix
+      if (candidate.length >= 16 && allowed.length >= 8 && candidate.endsWith(allowed)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -305,6 +371,59 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
               `Immutable Git Tag anchor "refs/tags/${expectedTag}" is missing from git object database! Strict policy mandates verified tag anchors.`,
             );
           }
+        }
+      }
+    }
+
+    // In strict mode, verify that the commit modifying .governance/state.json is cryptographically signed by an authorized key
+    if (options.strict && projectRoot) {
+      const gitMeta = getGitAttestation(projectRoot);
+      if (gitMeta.isGit) {
+        try {
+          const stateCommitData = execSync('git log -1 --format="%H|%G?|%GS|%GK|%GF|%GP" -- .governance/state.json', {
+            cwd: projectRoot,
+            stdio: ["ignore", "pipe", "ignore"],
+            encoding: "utf8",
+          }).trim();
+
+          if (stateCommitData) {
+            const parts = stateCommitData.split("|");
+            const stateSigStatus = parts[1] || "N";
+            const stateMeta = {
+              signatureStatus: stateSigStatus,
+              signerName: parts[2] || "",
+              signerKeyId: parts[3] || "",
+              signerFingerprint: parts[4] || "",
+              primaryFingerprint: parts[5] || "",
+              signerKey: parts[4] || parts[5] || parts[3] || "",
+            };
+
+            if (stateSigStatus !== "G") {
+              violations.push(
+                `The commit modifying .governance/state.json lacks a verified cryptographic signature (status: "${stateSigStatus}"). Strict policy requires verified GPG/SSH commit signatures on state changes.`,
+              );
+            } else {
+              const authFile = resolve(getGovernanceStateDir(projectRoot), "authorized-approvers.json");
+              if (existsSync(authFile)) {
+                try {
+                  const authData = JSON.parse(readFileSync(authFile, "utf8"));
+                  const allowedKeys = Array.isArray(authData)
+                    ? authData
+                    : authData?.allowedKeyFingerprints || [];
+
+                  if (allowedKeys.length > 0 && !isKeyFingerprintAuthorized(stateMeta, allowedKeys)) {
+                    violations.push(
+                      `The commit modifying .governance/state.json was signed by an unauthorized key (${stateMeta.signerFingerprint || stateMeta.signerKey}).`,
+                    );
+                  }
+                } catch {
+                  // Fallback
+                }
+              }
+            }
+          }
+        } catch {
+          // Fallback
         }
       }
     }
@@ -435,6 +554,12 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
     resolvedAuthor = `${gitMeta.userName} <${gitMeta.userEmail}>`;
   }
 
+  // Sanitize approver name to reject shell metacharacters and control characters
+  if (typeof approver === "string" && /[;&|`$\n\r<>]/.test(approver)) {
+    console.error("[FAIL] Security Violation: Approver identifier contains illegal shell or control characters.");
+    return false;
+  }
+
   // 3. Cryptographic Signature & Authorized Approvers Enforcement
   const authFile = resolve(getGovernanceStateDir(projectRoot), "authorized-approvers.json");
   let authData = null;
@@ -466,6 +591,26 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
       (authData?.allowedKeyFingerprints && authData.allowedKeyFingerprints.length > 0),
   );
 
+  // Prevent signature borrowing: in strict mode, verify that docs/foundation/02-spec.md has no uncommitted changes
+  if (strictKeyEnforcement && gitMeta.isGit) {
+    try {
+      const specDiff = execSync("git diff HEAD -- docs/foundation/02-spec.md", {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+      }).trim();
+
+      if (specDiff.length > 0) {
+        console.error(
+          "[FAIL] Security Violation: Uncommitted changes detected in docs/foundation/02-spec.md. In strict mode, acceptance criteria must be committed in a signed commit before approval to prevent signature borrowing.",
+        );
+        return false;
+      }
+    } catch {
+      // Non-fatal if diff check fails
+    }
+  }
+
   if (strictKeyEnforcement) {
     if (!gitMeta.isGit) {
       console.error("[FAIL] Security Violation: Strict specification approval requires an active Git repository.");
@@ -484,20 +629,16 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
       : authData?.allowedKeyFingerprints || [];
 
     if (allowedKeys.length > 0) {
-      if (!gitMeta.signerKey) {
+      if (!gitMeta.signerKey && !gitMeta.signerKeyId && !gitMeta.signerFingerprint) {
         console.error(
           `[FAIL] Security Violation: Signer key fingerprint could not be extracted from commit signature.`,
         );
         return false;
       }
 
-      const keyMatches = allowedKeys.some(
-        (k) => k.toLowerCase() === gitMeta.signerKey.toLowerCase(),
-      );
-
-      if (!keyMatches) {
+      if (!isKeyFingerprintAuthorized(gitMeta, allowedKeys)) {
         console.error(
-          `[FAIL] Security Violation: Signing key "${gitMeta.signerKey}" (${gitMeta.signerName || "unnamed"}) is not authorized. Key fingerprint is not listed in allowedKeyFingerprints in authorized-approvers.json.`,
+          `[FAIL] Security Violation: Signing key "${gitMeta.signerFingerprint || gitMeta.signerKey}" (${gitMeta.signerName || "unnamed"}) is not authorized. Key fingerprint is not listed in allowedKeyFingerprints in authorized-approvers.json.`,
         );
         return false;
       }
@@ -508,7 +649,7 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
     if (allowed.length > 0) {
       const matches = allowed.some(
         (a) =>
-          (gitMeta.signerKey && a.toLowerCase() === gitMeta.signerKey.toLowerCase()) ||
+          isKeyFingerprintAuthorized(gitMeta, [a]) ||
           a.toLowerCase() === resolvedAuthor.toLowerCase() ||
           (gitMeta.userEmail && a.toLowerCase() === gitMeta.userEmail.toLowerCase()) ||
           (gitMeta.userName && a.toLowerCase() === gitMeta.userName.toLowerCase()),

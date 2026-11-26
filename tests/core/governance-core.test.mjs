@@ -28,7 +28,9 @@ import {
   getGitAttestation,
   getGovernanceStateDir,
   hashText,
+  isKeyFingerprintAuthorized,
   loadGovernanceState,
+  normalizeKey,
   saveGovernanceState,
   verifyAuditChain,
   verifyCriteriaIntegrity,
@@ -346,6 +348,70 @@ Some descriptive text without any table.
         const integrityCheck = verifyCriteriaIntegrity(tempDir);
         assert.equal(integrityCheck.ok, false);
         assert.ok(integrityCheck.violations.some((v) => v.includes("has NOT been approved")));
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("accurately normalizes and matches full 40-char fingerprints, primary fingerprints, and key IDs", () => {
+      const fullFingerprint = "4A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B";
+      const keyId = "9A0B1C2D3E4F5A6B"; // 16-hex key ID suffix
+
+      // 1. Direct match with full 40-char fingerprint
+      assert.equal(
+        isKeyFingerprintAuthorized({ signerFingerprint: fullFingerprint }, [fullFingerprint]),
+        true,
+      );
+
+      // 2. Formatted with spaces or colons (e.g. gpg output "4A8B 9C0D ...")
+      const formattedFingerprint = "4A8B 9C0D 1E2F 3A4B 5C6D  7E8F 9A0B 1C2D 3E4F 5A6B";
+      assert.equal(
+        isKeyFingerprintAuthorized({ signerFingerprint: fullFingerprint }, [formattedFingerprint]),
+        true,
+      );
+
+      // 3. Allowed list has full 40-char fingerprint, git log returned 16-char key ID
+      assert.equal(
+        isKeyFingerprintAuthorized({ signerKeyId: keyId }, [fullFingerprint]),
+        true,
+      );
+
+      // 4. Allowed list has 16-char key ID, git log returned full 40-char fingerprint
+      assert.equal(
+        isKeyFingerprintAuthorized({ signerFingerprint: fullFingerprint }, [keyId]),
+        true,
+      );
+
+      // 5. Allowed list has primary fingerprint matching %GP
+      assert.equal(
+        isKeyFingerprintAuthorized({ primaryFingerprint: fullFingerprint }, [fullFingerprint]),
+        true,
+      );
+
+      // 6. Non-matching key fingerprint must be rejected
+      assert.equal(
+        isKeyFingerprintAuthorized({ signerFingerprint: fullFingerprint }, ["FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"]),
+        false,
+      );
+    });
+
+    test("rejects approver identifiers containing command injection characters", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-injection-test-"));
+      try {
+        const docsDir = join(tempDir, "docs", "foundation");
+        mkdirSync(docsDir, { recursive: true });
+        writeFileSync(
+          join(docsDir, "02-spec.md"),
+          `# Specification\n### Story 1: Test\n| ID | Given | When | Then |\n| :-- | :--- | :--- | :--- |\n| 1.1 | A | B | C |\n`,
+          "utf8",
+        );
+
+        // Attempt injection payloads
+        assert.equal(approveSpec('Muath"; rm -rf / #', {}, tempDir), false);
+        assert.equal(approveSpec("Muath && whoami", {}, tempDir), false);
+        assert.equal(approveSpec("Muath | cat /etc/passwd", {}, tempDir), false);
+        assert.equal(approveSpec("Muath$(id)", {}, tempDir), false);
+        assert.equal(approveSpec("Muath`id`", {}, tempDir), false);
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
