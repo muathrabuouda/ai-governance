@@ -15,7 +15,12 @@ jobs:
         with:
           node-version: 22
 
+      - run: npm ci
+      - run: npm run format
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --audit-level=high
       - run: node bin/governance.mjs check --profile=standard
-      - run: node --test tests/core/governance-core.test.mjs
       - run: node scripts/check-deps.mjs
       - run: node scripts/scan-secrets.mjs
