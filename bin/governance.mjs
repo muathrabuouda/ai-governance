@@ -32,10 +32,12 @@ const [, , command, ...args] = process.argv;
 const COMMANDS = {
   // Scaffolding & Decisions
   init: {
-    description: "Initialize 3-pillar methodology docs in target project: governance init [title]",
+    description: "Initialize 3-pillar methodology docs in target project: governance init [title] [--force]",
     action: () => {
-      const title = args.join(" ") || "New Project";
-      initDocs(title);
+      const isForce = args.includes("--force") || args.includes("-f");
+      const filteredArgs = args.filter((a) => a !== "--force" && a !== "-f");
+      const title = filteredArgs.join(" ") || "New Project";
+      initDocs(title, undefined, isForce);
     },
   },
   status: {
@@ -88,10 +90,49 @@ const COMMANDS = {
     action: () => installGitHooks(),
   },
 
-  // Verification & Testing
+  // Verification & Engineering Gates
   check: {
-    description: "Run full verification pipeline across platform and golden project",
-    action: () => runNpmScript("check"),
+    description: "Run verification gates on current project: secrets, git audit, design tokens",
+    action: () => {
+      const isInternalRoot = process.cwd() === rootDir;
+      if (isInternalRoot) {
+        runNpmScript("check");
+        return;
+      }
+
+      console.log(`\n🛡️  Running Governance Verification Gates in: ${process.cwd()}...\n`);
+      let failed = false;
+
+      // 1. Secrets Scan in current project
+      console.log("➡️  Scanning for secret leaks...");
+      const secretsResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/scan-secrets.mjs"), process.cwd()], {
+        stdio: "inherit",
+      });
+      if (secretsResult.status !== 0) failed = true;
+
+      // 2. Audit Git commits
+      console.log("\n➡️  Auditing Git commits...");
+      const gitResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-git.mjs")], {
+        cwd: process.cwd(),
+        stdio: "inherit",
+      });
+      if (gitResult.status !== 0) failed = true;
+
+      // 3. Design System Audit (if UI files exist)
+      console.log("\n➡️  Auditing UI Design Tokens...");
+      const designResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-design.mjs"), process.cwd()], {
+        stdio: "inherit",
+      });
+      if (designResult.status !== 0) failed = true;
+
+      if (failed) {
+        console.error("\n❌ Governance verification gates failed! Resolve issues before committing.");
+        process.exit(1);
+      } else {
+        console.log("\n✅ All Governance verification gates passed successfully!");
+        process.exit(0);
+      }
+    },
   },
   test: {
     description: "Execute automated unit, contract, and audit tests",

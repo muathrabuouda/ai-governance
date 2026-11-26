@@ -38,10 +38,12 @@ export function getDocsDir(customDir) {
 
 /**
  * Initializes a project's documentation suite from Governance templates into the 3-pillar structure.
+ * Skips existing files by default to preserve user modifications unless overwrite is true.
  * @param {string} projectName
  * @param {string} [targetDocsDir]
+ * @param {boolean} [overwrite=false]
  */
-export function initDocs(projectName = "Governance Project", targetDocsDir = getDocsDir()) {
+export function initDocs(projectName = "Governance Project", targetDocsDir = getDocsDir(), overwrite = false) {
   console.log(`\nInitializing Governance 3-pillar methodology documentation for "${projectName}"...\nTarget: ${targetDocsDir}\n`);
 
   const foundationTarget = resolve(targetDocsDir, "foundation");
@@ -136,16 +138,25 @@ export function initDocs(projectName = "Governance Project", targetDocsDir = get
     },
   ];
 
+  let createdCount = 0;
+  let skippedCount = 0;
+
   for (const { src, dest, name } of templatesMap) {
     if (existsSync(src)) {
+      if (existsSync(dest) && !overwrite) {
+        console.log(`  - [SKIPPED] ${name} (already exists, use --force to overwrite)`);
+        skippedCount++;
+        continue;
+      }
       let content = readFileSync(src, "utf8");
       content = content.replace(/\{\{PROJECT_TITLE\}\}/g, projectName);
       writeFileSync(dest, content, "utf8");
-      console.log(`  ✓ [CREATED] ${name}`);
+      console.log(`  ✓ [${existsSync(dest) ? "UPDATED" : "CREATED"}] ${name}`);
+      createdCount++;
     }
   }
 
-  console.log("\n✅ Governance 3-pillar documentation suite initialized successfully in target project.");
+  console.log(`\n✅ Governance 3-pillar documentation suite initialized: ${createdCount} written, ${skippedCount} preserved.`);
 }
 
 /**
@@ -391,7 +402,8 @@ export function generateAgentRules(projectRoot = process.cwd()) {
 }
 
 /**
- * Installs Git pre-commit and pre-push hooks to enforce test protection and conventional commits.
+ * Installs Git pre-commit enforcement hook in target repository.
+ * Preserves any existing pre-commit hook by appending to it safely and enforces real exit code.
  * @param {string} [projectRoot]
  */
 export function installGitHooks(projectRoot = process.cwd()) {
@@ -404,24 +416,41 @@ export function installGitHooks(projectRoot = process.cwd()) {
   const hooksDir = resolve(gitDir, "hooks");
   if (!existsSync(hooksDir)) mkdirSync(hooksDir, { recursive: true });
 
-  const preCommitHook = `#!/usr/bin/env sh
-# Governance Pre-Commit Hook: Prevent test suite regression & secret leaks
-echo "🛡️  Running Governance Pre-Commit Verification..."
-
-# Check secrets if scanner available
-if command -v npx >/dev/null 2>&1; then
-  npx --no-install governance check 2>/dev/null || true
+  const hookMarker = "# --- GOVERNANCE PRE-COMMIT VERIFICATION ---";
+  const governanceSnippet = `
+${hookMarker}
+echo "🛡️  Running Governance Pre-Commit Verification on project..."
+if command -v governance >/dev/null 2>&1; then
+  governance check || exit 1
+elif command -v npx >/dev/null 2>&1; then
+  npx --no-install github:muathrabuouda/ai-governance check || exit 1
 fi
+# --- END GOVERNANCE PRE-COMMIT ---
 `;
 
   const preCommitPath = resolve(hooksDir, "pre-commit");
-  writeFileSync(preCommitPath, preCommitHook, "utf8");
+
+  if (existsSync(preCommitPath)) {
+    const existingContent = readFileSync(preCommitPath, "utf8");
+    if (existingContent.includes(hookMarker)) {
+      console.log(`\nℹ️  Governance hook is already installed in .git/hooks/pre-commit.`);
+      return true;
+    }
+    // Append to existing hook without overwriting user's tools (e.g. Pint, Husky, Pest)
+    writeFileSync(preCommitPath, existingContent.trimEnd() + "\n" + governanceSnippet, "utf8");
+    console.log(`\n✅ Governance verification hook appended to existing .git/hooks/pre-commit`);
+  } else {
+    // Create new executable hook
+    const newHook = `#!/usr/bin/env sh\n` + governanceSnippet;
+    writeFileSync(preCommitPath, newHook, "utf8");
+    console.log(`\n✅ New Governance Git pre-commit hook installed at .git/hooks/pre-commit`);
+  }
+
   try {
     chmodSync(preCommitPath, 0o755);
   } catch {
     // Windows permissions
   }
 
-  console.log(`\n✅ Governance Git pre-commit hook installed at .git/hooks/pre-commit\n`);
   return true;
 }
