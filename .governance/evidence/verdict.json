@@ -2,8 +2,8 @@
   "version": "1.0.0",
   "verdict": "REQUIRES_REVIEW",
   "summary": "1 gate(s) completed with warnings or require review: Static Analysis & Linting",
-  "timestamp": "2026-11-26T20:19:48.008Z",
-  "durationMs": 18162,
+  "timestamp": "2026-11-26T21:07:36.341Z",
+  "durationMs": 29187,
   "environment": {
     "platform": "win32",
     "nodeVersion": "v24.18.0",
@@ -13,8 +13,8 @@
     "isGit": true,
     "userName": "Muath R Abu Ouda",
     "userEmail": "muathrabuouda@hotmail.com",
-    "commitSha": "780d1ef10145a75ab8b99c86d125bef257a408ba",
-    "treeHash": "09e39168bf82f6f3bcb5ca8ea324b89e7fe03027",
+    "commitSha": "1695c2993aa92df3c4813e04bc141a8c674592fe",
+    "treeHash": "bf04753250ad0e3cd4049ebbb496b281b9b65525",
     "signatureStatus": "N",
     "signerName": "",
     "signerKey": "",
@@ -114,5 +114,5 @@
       "message": "[INFO] UI Design Tokens & System Compliance skipped: No frontend templates or UI stylesheets found (Not Applicable)"
     }
   ],
-  "signature": "3aaa4fc317a972c7eaff56b360d950ed3b5901305d260a34fe6a5318f8842910"
+  "signature": "d547772a03456e46aa939ec9b6c57aa16f1d57f729fea4f396c35bbbcf363639"
 }
