@@ -190,8 +190,12 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
   const addedStories = [];
   const prunedStories = [];
 
-  // 1. Process active stories
+  // 1. Process active stories (excluding formally deprecated stories)
   for (const [storyNum, criteriaText] of Object.entries(blocks)) {
+    if (state.deprecatedStories && state.deprecatedStories[storyNum]) {
+      // Story has been deprecated; do not re-activate without explicit un-deprecation
+      continue;
+    }
     const newHash = hashText(criteriaText);
     if (!state.storyHashes[storyNum]) {
       addedStories.push(storyNum);
@@ -255,10 +259,13 @@ export const lockCriteria = approveSpec;
 /**
  * Formally marks a story as deprecated in .governance/state.json with justification.
  * Appends a tamper-evident DEPRECATE_STORY block to the audit hash chain.
+ * Synchronizes docs/foundation/02-spec.md to mark story header as [DEPRECATED].
+ *
  * @param {number|string} storyNumber
  * @param {string} [reason]
  * @param {string} [author]
  * @param {string} [projectRoot]
+ * @param {{ supersededBy?: string|null }} [options]
  * @returns {boolean}
  */
 export function deprecateStory(
@@ -266,6 +273,7 @@ export function deprecateStory(
   reason = "Deprecated by engineer",
   author = "Engineer",
   projectRoot = process.cwd(),
+  options = {},
 ) {
   const state = loadGovernanceState(projectRoot);
   if (!state.deprecatedStories) {
@@ -279,7 +287,26 @@ export function deprecateStory(
     reason,
     deprecatedAt: new Date().toISOString(),
     author,
+    supersededBy: options.supersededBy || null,
   };
+
+  // Synchronize docs/foundation/02-spec.md to mark story header as DEPRECATED if file exists
+  const specPath = resolve(projectRoot, "docs/foundation/02-spec.md");
+  if (existsSync(specPath)) {
+    try {
+      let specContent = readFileSync(specPath, "utf8");
+      const tag = options.supersededBy
+        ? `[DEPRECATED: SUPERSEDED BY STORY ${options.supersededBy}]`
+        : `[DEPRECATED]`;
+      const storyHeaderRegex = new RegExp(`(###\\s+Story\\s+${storyKey}\\b[^\n]*?)(?!\\s*\\[DEPRECATED)`, "i");
+      if (storyHeaderRegex.test(specContent) && !specContent.includes(`Story ${storyKey} [DEPRECATED`)) {
+        specContent = specContent.replace(storyHeaderRegex, `$1 ${tag}`);
+        writeFileSync(specPath, specContent, "utf8");
+      }
+    } catch {
+      // Do not block deprecation on non-fatal spec write errors
+    }
+  }
 
   const previousHash =
     state.auditLog && state.auditLog.length > 0
@@ -297,6 +324,7 @@ export function deprecateStory(
     details: {
       storyNumber: storyKey,
       reason,
+      supersededBy: options.supersededBy || null,
       wasActive,
     },
   };
@@ -307,6 +335,9 @@ export function deprecateStory(
 
   console.log(`[PASS] Story ${storyKey} formally deprecated by "${author}"`);
   console.log(`       Reason: ${reason}`);
+  if (options.supersededBy) {
+    console.log(`       Superseded by: Story ${options.supersededBy}`);
+  }
   console.log(`       Audit block ${auditBlock.index} hash: ${auditBlock.hash.slice(0, 16)}...`);
   return true;
 }
@@ -315,6 +346,8 @@ export function deprecateStory(
  * Verifies that no existing locked story criteria has been tampered with or weakened.
  * Validates the full audit hash chain from genesis to head before checking story hashes.
  * Strictly read-only: NEVER approves or registers newly added stories automatically.
+ * Correctly respects deprecated and superseded stories without false violations.
+ *
  * @param {string} projectRoot
  * @returns {{ ok: boolean, violations: string[] }}
  */
@@ -334,7 +367,7 @@ export function verifyCriteriaIntegrity(projectRoot = process.cwd()) {
 
   // 2. Verify locked stories against current specification
   for (const [storyNum, expectedHash] of Object.entries(state.storyHashes)) {
-    // If formally deprecated, skip
+    // If formally deprecated, skip verification of criteria
     if (state.deprecatedStories && state.deprecatedStories[storyNum]) {
       continue;
     }
@@ -356,6 +389,11 @@ export function verifyCriteriaIntegrity(projectRoot = process.cwd()) {
 
   // 3. Reject unapproved stories: Any story in spec not yet in state.json is a violation
   for (const [storyNum] of Object.entries(blocks)) {
+    // If the story has been formally deprecated, it is exempted from unapproved active story checks
+    if (state.deprecatedStories && state.deprecatedStories[storyNum]) {
+      continue;
+    }
+
     if (!state.storyHashes[storyNum]) {
       violations.push(
         `Story ${storyNum}: Acceptance Criteria exists in 02-spec.md but has NOT been approved in .governance/state.json. Run "governance approve:spec" to approve.`,
@@ -371,7 +409,9 @@ export function verifyCriteriaIntegrity(projectRoot = process.cwd()) {
 
 /**
  * Verifies that active stories in progress have an associated threat model.
- * Enforces a strict blocking gate unless an explicit documented waiver exists.
+ * Enforces a strict blocking gate unless an explicit documented waiver exists
+ * or the story has been formally deprecated.
+ *
  * @param {string} projectRoot
  * @returns {{ ok: boolean, violations: string[], waived: string[] }}
  */
@@ -391,7 +431,7 @@ export function verifyThreatModelCoverage(projectRoot = process.cwd()) {
     try {
       externalWaivers = JSON.parse(readFileSync(waiversFile, "utf8"));
     } catch {
-      // fallback
+      // Fallback on parse failure
     }
   }
 
@@ -406,6 +446,12 @@ export function verifyThreatModelCoverage(projectRoot = process.cwd()) {
   for (const match of storyMatches) {
     const storyNum = match[1];
     const threatFile = resolve(threatDir, `story-${storyNum}.md`);
+
+    // If deprecated, skip threat model check with note
+    if (state.deprecatedStories && state.deprecatedStories[storyNum]) {
+      waived.push(`Story ${storyNum} (Deprecated: ${state.deprecatedStories[storyNum].reason})`);
+      continue;
+    }
 
     if (activeWaivers[storyNum]) {
       waived.push(`Story ${storyNum} (Reason: ${activeWaivers[storyNum]})`);

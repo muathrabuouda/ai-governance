@@ -114,16 +114,21 @@ const COMMANDS = {
     },
   },
   "deprecate:story": {
-    description: "Formally deprecate an existing story: governance deprecate:story <number> [reason] [--author=<name>]",
+    description: "Formally deprecate an existing story: governance deprecate:story <number> [reason] [--author=<name>] [--superseded-by=<id>]",
     action: () => {
-      const [storyNum, ...reasonParts] = args.filter((a) => !a.startsWith("--author="));
+      const filtered = args.filter((a) => !a.startsWith("--author=") && !a.startsWith("--superseded-by="));
+      const [storyNum, ...reasonParts] = filtered;
       const authorFlag = args.find((a) => a.startsWith("--author="));
+      const supersededFlag = args.find((a) => a.startsWith("--superseded-by="));
       const author = authorFlag ? authorFlag.replace("--author=", "") : "Engineer";
+      const supersededBy = supersededFlag ? supersededFlag.replace("--superseded-by=", "") : null;
       if (!storyNum) {
-        console.error("Usage: governance deprecate:story <number> [reason] [--author=<name>]");
+        console.error("Usage: governance deprecate:story <number> [reason] [--author=<name>] [--superseded-by=<id>]");
         process.exit(1);
       }
-      deprecateStory(storyNum, reasonParts.join(" ") || "Deprecated by engineer", author, process.cwd());
+      deprecateStory(storyNum, reasonParts.join(" ") || "Deprecated by engineer", author, process.cwd(), {
+        supersededBy,
+      });
     },
   },
   "install:hooks": {
