@@ -7,6 +7,7 @@
  * @license MIT
  */
 
+import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -43,6 +44,7 @@ export function loadGovernanceState(projectRoot = process.cwd()) {
         lastVerifiedAt: data.lastVerifiedAt || new Date().toISOString(),
         lastApprovedAt: data.lastApprovedAt,
         lastApprovedBy: data.lastApprovedBy,
+        headAnchor: data.headAnchor,
       };
     } catch {
       // fallback
@@ -72,6 +74,92 @@ export function saveGovernanceState(state, projectRoot = process.cwd()) {
 const GENESIS_PREVIOUS_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
 
 /**
+ * Retrieves Git committer metadata, commit SHA, and tree hash for cryptographic audit attestation.
+ * @param {string} projectRoot
+ * @returns {{ isGit: boolean, userName: string, userEmail: string, commitSha: string, treeHash: string }}
+ */
+export function getGitAttestation(projectRoot = process.cwd()) {
+  try {
+    const isGit =
+      execSync("git rev-parse --is-inside-work-tree", {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+      }).trim() === "true";
+
+    if (!isGit) {
+      return {
+        isGit: false,
+        userName: "Non-Git User",
+        userEmail: "non-git@local",
+        commitSha: "0000000000000000000000000000000000000000",
+        treeHash: "0000000000000000000000000000000000000000",
+      };
+    }
+
+    let userName = "";
+    try {
+      userName = execSync("git config user.name", {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+      }).trim();
+    } catch {
+      // Non-fatal if unset
+    }
+
+    let userEmail = "";
+    try {
+      userEmail = execSync("git config user.email", {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+      }).trim();
+    } catch {
+      // Non-fatal if unset
+    }
+
+    let commitSha = "";
+    try {
+      commitSha = execSync("git rev-parse HEAD", {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+      }).trim();
+    } catch {
+      commitSha = "0000000000000000000000000000000000000000";
+    }
+
+    let treeHash = "";
+    try {
+      treeHash = execSync("git rev-parse HEAD^{tree}", {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+      }).trim();
+    } catch {
+      treeHash = "0000000000000000000000000000000000000000";
+    }
+
+    return {
+      isGit: true,
+      userName: userName || "Unknown Committer",
+      userEmail: userEmail || "unknown@local",
+      commitSha,
+      treeHash,
+    };
+  } catch {
+    return {
+      isGit: false,
+      userName: "Non-Git User",
+      userEmail: "non-git@local",
+      commitSha: "0000000000000000000000000000000000000000",
+      treeHash: "0000000000000000000000000000000000000000",
+    };
+  }
+}
+
+/**
  * Computes sha256 hash of text.
  * @param {string} text
  * @returns {string}
@@ -82,17 +170,20 @@ export function hashText(text) {
 
 /**
  * Calculates cryptographic hash for an audit log block.
+ * Includes attestation metadata if present.
  * @param {object} block
  * @returns {string}
  */
 export function calculateBlockHash(block) {
+  const attestationPart = block.attestation ? `:${JSON.stringify(block.attestation)}` : "";
   return hashText(
-    `${block.index}:${block.timestamp}:${block.action}:${block.author}:${block.previousHash}:${JSON.stringify(block.details)}`,
+    `${block.index}:${block.timestamp}:${block.action}:${block.author}:${block.previousHash}:${JSON.stringify(block.details)}${attestationPart}`,
   );
 }
 
 /**
  * Verifies cryptographic integrity of the entire audit hash chain.
+ * Validates backward continuity and checks external git tree anchor if present.
  * @param {object} state
  * @returns {{ ok: boolean, violations: string[] }}
  */
@@ -128,6 +219,19 @@ export function verifyAuditChain(state) {
     }
 
     expectedPrevious = block.hash;
+  }
+
+  // Cross-verify state.headAnchor against the latest block attestation
+  if (state.headAnchor && state.auditLog.length > 0) {
+    const lastBlock = state.auditLog[state.auditLog.length - 1];
+    const commitSha = lastBlock.attestation?.commitSha || "0000000000000000000000000000000000000000";
+    const treeHash = lastBlock.attestation?.treeHash || "0000000000000000000000000000000000000000";
+    const expectedAnchor = hashText(`${lastBlock.hash}:${commitSha}:${treeHash}`);
+    if (state.headAnchor !== expectedAnchor) {
+      violations.push(
+        `Audit log head anchor mismatch! Tampering detected between state.json and external git tree anchor.`,
+      );
+    }
   }
 
   return {
@@ -222,12 +326,52 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
   const previousHash =
     state.auditLog.length > 0 ? state.auditLog[state.auditLog.length - 1].hash : GENESIS_PREVIOUS_HASH;
 
+  const gitMeta = getGitAttestation(projectRoot);
+  let resolvedAuthor = approver;
+  if ((!approver || approver === "Engineer") && gitMeta.isGit && gitMeta.userEmail !== "unknown@local") {
+    resolvedAuthor = `${gitMeta.userName} <${gitMeta.userEmail}>`;
+  }
+
+  // Check optional authorized-approvers list if configured
+  const authFile = resolve(getGovernanceStateDir(projectRoot), "authorized-approvers.json");
+  if (existsSync(authFile)) {
+    try {
+      const authData = JSON.parse(readFileSync(authFile, "utf8"));
+      const allowed = Array.isArray(authData) ? authData : authData.approvers || [];
+      if (allowed.length > 0) {
+        const matches = allowed.some(
+          (a) =>
+            a.toLowerCase() === resolvedAuthor.toLowerCase() ||
+            (gitMeta.userEmail && a.toLowerCase() === gitMeta.userEmail.toLowerCase()) ||
+            (gitMeta.userName && a.toLowerCase() === gitMeta.userName.toLowerCase()),
+        );
+        if (!matches) {
+          console.error(
+            `[FAIL] Unauthorized approver "${resolvedAuthor}". Signer not listed in authorized-approvers.json.`,
+          );
+          return false;
+        }
+      }
+    } catch {
+      // Fallback on parse failure
+    }
+  }
+
+  const attestation = {
+    isGit: gitMeta.isGit,
+    userName: gitMeta.userName,
+    userEmail: gitMeta.userEmail,
+    commitSha: gitMeta.commitSha,
+    treeHash: gitMeta.treeHash,
+  };
+
   const auditBlock = {
     index: state.auditLog.length,
     timestamp: new Date().toISOString(),
     action: "APPROVE_SPEC",
-    author: approver,
+    author: resolvedAuthor,
     previousHash,
+    attestation,
     details: {
       addedStories,
       updatedStories,
@@ -240,11 +384,15 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
 
   state.auditLog.push(auditBlock);
   state.lastApprovedAt = auditBlock.timestamp;
-  state.lastApprovedBy = approver;
+  state.lastApprovedBy = resolvedAuthor;
+  state.headAnchor = hashText(`${auditBlock.hash}:${attestation.commitSha}:${attestation.treeHash}`);
 
   saveGovernanceState(state, projectRoot);
 
-  console.log(`[PASS] Specification locked and approved by "${approver}"`);
+  console.log(`[PASS] Specification locked and approved by "${resolvedAuthor}"`);
+  if (gitMeta.isGit && gitMeta.commitSha !== "0000000000000000000000000000000000000000") {
+    console.log(`       Git Anchor Commit: ${gitMeta.commitSha.slice(0, 10)} (Tree: ${gitMeta.treeHash.slice(0, 10)})`);
+  }
   console.log(`       Stories added: ${addedStories.length ? addedStories.join(", ") : "none"}`);
   console.log(`       Stories updated: ${updatedStories.length ? updatedStories.join(", ") : "none"}`);
   if (prunedStories.length > 0) {
@@ -315,12 +463,27 @@ export function deprecateStory(
 
   if (!state.auditLog) state.auditLog = [];
 
+  const gitMeta = getGitAttestation(projectRoot);
+  let resolvedAuthor = author;
+  if ((!author || author === "Engineer") && gitMeta.isGit && gitMeta.userEmail !== "unknown@local") {
+    resolvedAuthor = `${gitMeta.userName} <${gitMeta.userEmail}>`;
+  }
+
+  const attestation = {
+    isGit: gitMeta.isGit,
+    userName: gitMeta.userName,
+    userEmail: gitMeta.userEmail,
+    commitSha: gitMeta.commitSha,
+    treeHash: gitMeta.treeHash,
+  };
+
   const auditBlock = {
     index: state.auditLog.length,
     timestamp: new Date().toISOString(),
     action: "DEPRECATE_STORY",
-    author,
+    author: resolvedAuthor,
     previousHash,
+    attestation,
     details: {
       storyNumber: storyKey,
       reason,
@@ -331,9 +494,10 @@ export function deprecateStory(
   auditBlock.hash = calculateBlockHash(auditBlock);
 
   state.auditLog.push(auditBlock);
+  state.headAnchor = hashText(`${auditBlock.hash}:${attestation.commitSha}:${attestation.treeHash}`);
   saveGovernanceState(state, projectRoot);
 
-  console.log(`[PASS] Story ${storyKey} formally deprecated by "${author}"`);
+  console.log(`[PASS] Story ${storyKey} formally deprecated by "${resolvedAuthor}"`);
   console.log(`       Reason: ${reason}`);
   if (options.supersededBy) {
     console.log(`       Superseded by: Story ${options.supersededBy}`);
