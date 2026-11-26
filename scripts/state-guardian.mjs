@@ -241,9 +241,12 @@ export function verifyAuditChain(state) {
 }
 
 /**
- * Extracts all stories and their Acceptance Criteria blocks from 02-spec.md.
- * @param {string} projectRoot
- * @returns {Record<string, string>}
+ * Extracts all stories and their Acceptance Criteria blocks from docs/foundation/02-spec.md.
+ * Accurately parses full Markdown tables (including header, separator, and all data rows)
+ * without prematurely stopping on Markdown separator dashes (:---).
+ *
+ * @param {string} projectRoot - Root directory of the repository
+ * @returns {Record<string, string>} Mapping of story number to full criteria block text
  */
 export function extractCriteriaBlocks(projectRoot = process.cwd()) {
   const specPath = resolve(projectRoot, "docs/foundation/02-spec.md");
@@ -258,12 +261,36 @@ export function extractCriteriaBlocks(projectRoot = process.cwd()) {
     if (!numMatch) continue;
     const storyNum = numMatch[1];
 
-    const tableMatch = block.match(/\|\s*ID\s*\|\s*Given[\s\S]*?(?=(?:---|$))/i);
-    const headerMatch = block.match(/####\s+Acceptance\s+Criteria[\s\S]*?(?=(?:---|$))/i);
+    // 1. Locate the criteria table starting with the table header row "| ID |"
+    const tableHeaderIdx = block.search(/^\|[ \t]*ID[ \t]*\|/im);
+    if (tableHeaderIdx !== -1) {
+      const remaining = block.slice(tableHeaderIdx);
+      const lines = remaining.split(/\r?\n/);
+      const tableLines = [];
 
-    if (tableMatch) {
-      result[storyNum] = tableMatch[0].trim();
-    } else if (headerMatch) {
+      for (const line of lines) {
+        const trimmed = line.trim();
+        // Continue collecting as long as lines are Markdown table rows
+        if (trimmed.startsWith("|")) {
+          tableLines.push(trimmed);
+        } else if (tableLines.length > 0) {
+          // Break when encountering a blank line, divider, or non-table content
+          break;
+        }
+      }
+
+      // Ensure we captured at least the header and separator rows, plus any data rows
+      if (tableLines.length >= 2) {
+        result[storyNum] = tableLines.join("\n").trim();
+        continue;
+      }
+    }
+
+    // 2. Fallback: Capture standard "#### Acceptance Criteria" text block until next heading or horizontal rule
+    const headerMatch = block.match(
+      /####\s+Acceptance\s+Criteria[\s\S]*?(?=(?:\r?\n\s*#{2,4}\s+|\r?\n\s*---+\s*$|$))/i,
+    );
+    if (headerMatch) {
       result[storyNum] = headerMatch[0].trim();
     }
   }

@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { describe } from "node:test";
@@ -209,6 +209,87 @@ describe("Governance Core Integration Tests", () => {
         assert.equal(loaded.deprecatedStories["1"].supersededBy, "2");
         assert.equal(loaded.auditLog.length, 1);
         assert.equal(loaded.auditLog[0].action, "DEPRECATE_STORY");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("captures full acceptance criteria tables and detects cell mutation or row deletion", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-criteria-test-"));
+      try {
+        const docsDir = join(tempDir, "docs", "foundation");
+        mkdirSync(docsDir, { recursive: true });
+
+        const initialSpec = `# Specification
+### Story 1: View Slots
+| ID  | Given | When | Then |
+| :-- | :--- | :--- | :--- |
+| 1.1 | 5 slots free | User views page | 5 slots displayed |
+| 1.2 | Clinic closed | User views Friday | 0 slots displayed |
+
+---
+
+### Story 2: Book Slot
+| ID  | Given | When | Then |
+| :-- | :--- | :--- | :--- |
+| 2.1 | Slot is free | User books | Appointment created |
+`;
+        writeFileSync(join(docsDir, "02-spec.md"), initialSpec, "utf8");
+
+        // 1. Approve initial specification
+        const approved = approveSpec("Tester", {}, tempDir);
+        assert.equal(approved, true);
+
+        // 2. Initial verification must pass
+        const check1 = verifyCriteriaIntegrity(tempDir);
+        assert.equal(check1.ok, true);
+        assert.equal(check1.violations.length, 0);
+
+        // 3. Mutate a single cell in Story 1 (e.g. 5 slots -> 6 slots)
+        const mutatedSpec = initialSpec.replace("5 slots displayed", "6 slots displayed");
+        writeFileSync(join(docsDir, "02-spec.md"), mutatedSpec, "utf8");
+
+        const check2 = verifyCriteriaIntegrity(tempDir);
+        assert.equal(check2.ok, false);
+        assert.ok(check2.violations.some((v) => v.includes("Story 1") && v.includes("modified or weakened")));
+
+        // 4. Delete row 1.2 from Story 1
+        const rowDeletedSpec = `# Specification
+### Story 1: View Slots
+| ID  | Given | When | Then |
+| :-- | :--- | :--- | :--- |
+| 1.1 | 5 slots free | User views page | 5 slots displayed |
+
+---
+
+### Story 2: Book Slot
+| ID  | Given | When | Then |
+| :-- | :--- | :--- | :--- |
+| 2.1 | Slot is free | User books | Appointment created |
+`;
+        writeFileSync(join(docsDir, "02-spec.md"), rowDeletedSpec, "utf8");
+
+        const check3 = verifyCriteriaIntegrity(tempDir);
+        assert.equal(check3.ok, false);
+        assert.ok(check3.violations.some((v) => v.includes("Story 1") && v.includes("modified or weakened")));
+
+        // 5. Delete entire criteria table without formal deprecation
+        const criteriaDeletedSpec = `# Specification
+### Story 1: View Slots
+Some descriptive text without any table.
+
+---
+
+### Story 2: Book Slot
+| ID  | Given | When | Then |
+| :-- | :--- | :--- | :--- |
+| 2.1 | Slot is free | User books | Appointment created |
+`;
+        writeFileSync(join(docsDir, "02-spec.md"), criteriaDeletedSpec, "utf8");
+
+        const check4 = verifyCriteriaIntegrity(tempDir);
+        assert.equal(check4.ok, false);
+        assert.ok(check4.violations.some((v) => v.includes("Story 1") && v.includes("deleted")));
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
