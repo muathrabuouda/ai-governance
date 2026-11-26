@@ -65,18 +65,21 @@ governance <command> [options]
 
 | Command | Description |
 | :--- | :--- |
-| `check` | Executes the complete verification pipeline (formatting, linting, typechecking, tests, dependencies, secrets). |
-| `test` | Runs all automated unit, property-based, and contract tests. |
-| `mutate` | Executes mutation tests and calculates mutation score to evaluate test effectiveness. |
-| `context` | Inspects agent context size and calculates token consumption footprints across rule files. |
-| `map` | Generates a structured repository architectural map (`docs/repo-map.md`). |
-| `story <id>` | Inspects and displays the formal acceptance criteria for a given user story. |
-| `bench` | Runs performance benchmarks verifying batched queries versus naive implementations. |
+| `check` | Multi-stack verification pipeline (Stack test suite, Pint/Prettier format, Static analysis, Secrets scan, Conventional commits, Acceptance Criteria lock). |
+| `status` | Summarizes project governance status, registered ADRs, and active story progression. |
+| `init [title] [--force]` | Initializes the full 3-pillar methodology documentation suite (safe by default, preserves existing files). |
+| `new:adr <title>` | Records a new Architecture Decision Record in `docs/foundation/adr/`. |
+| `list:adr` | Lists all Architecture Decision Records and their statuses. |
+| `new:story <id> <title>` | Scaffolds a new user story with acceptance criteria (prevents duplicates). |
+| `new:threat <id> [title]` | Creates a story-level STRIDE threat model in `docs/lifecycle/threat-model/`. |
+| `rules` | Generates managed AI agent instructions (`.cursorrules`, `CLAUDE.md`, Copilot) with safe block merging. |
+| `install:hooks` | Installs Git pre-commit verification hook (preserves existing hooks and enforces real exit codes). |
+| `install:ci` | Generates an unbypassable GitHub Actions CI/CD governance workflow (`.github/workflows/governance-gate.yml`). |
+| `audit:git` | Audits git commits against Conventional Commits standards. |
+| `audit:design` | Audits UI templates for Design System rules (70-20-10 distribution, accent-only green). |
 | `secrets` | Scans repository for exposed API keys, private tokens, and credentials. |
 | `deps` | Verifies that all dependencies are strictly pinned and security-approved. |
-| `audit:git` | Audits git commits against Conventional Commits standards. |
-| `audit:design` | Audits UI templates for Design System rules (70-20-10 distribution, no green background). |
-| `init [title]` | Initializes the full methodology documentation suite from templates. |
+| `map` | Generates a structured repository architectural map (`docs/repo-map.md`). |
 | `prompt [phase]` | Displays engineering prompts across the 13 methodology phases (00 to 12). |
 
 ---
