@@ -27,7 +27,7 @@ export function getGovernanceStateDir(projectRoot = process.cwd()) {
 /**
  * Loads current governance state file.
  * @param {string} projectRoot
- * @returns {{ version: string, storyHashes: Record<string, string>, lastVerifiedAt: string }}
+ * @returns {{ version: string, storyHashes: Record<string, string>, lastVerifiedAt: string, lastApprovedAt?: string, lastApprovedBy?: string, auditLog?: Array<object> }}
  */
 export function loadGovernanceState(projectRoot = process.cwd()) {
   const stateFile = resolve(getGovernanceStateDir(projectRoot), "state.json");
@@ -41,6 +41,7 @@ export function loadGovernanceState(projectRoot = process.cwd()) {
   return {
     version: "1.0.0",
     storyHashes: {},
+    auditLog: [],
     lastVerifiedAt: new Date().toISOString(),
   };
 }
@@ -82,9 +83,14 @@ export function extractCriteriaBlocks(projectRoot = process.cwd()) {
     const numMatch = block.match(/^([0-9]+)[:\s]/);
     if (!numMatch) continue;
     const storyNum = numMatch[1];
-    const criteriaMatch = block.match(/####\s+Acceptance\s+Criteria[\s\S]*?(?=(?:---|$))/i);
-    if (criteriaMatch) {
-      result[storyNum] = criteriaMatch[0].trim();
+
+    const tableMatch = block.match(/\|\s*ID\s*\|\s*Given[\s\S]*?(?=(?:---|$))/i);
+    const headerMatch = block.match(/####\s+Acceptance\s+Criteria[\s\S]*?(?=(?:---|$))/i);
+
+    if (tableMatch) {
+      result[storyNum] = tableMatch[0].trim();
+    } else if (headerMatch) {
+      result[storyNum] = headerMatch[0].trim();
     }
   }
 
@@ -92,24 +98,66 @@ export function extractCriteriaBlocks(projectRoot = process.cwd()) {
 }
 
 /**
- * Locks current Acceptance Criteria into .governance/state.json.
+ * Formally approves and cryptographically locks Acceptance Criteria into .governance/state.json.
+ * Must be invoked explicitly via human approval (governance approve:spec).
+ * @param {string} approver
  * @param {string} projectRoot
+ * @returns {boolean}
  */
-export function lockCriteria(projectRoot = process.cwd()) {
+export function approveSpec(approver = "Engineer", projectRoot = process.cwd()) {
   const blocks = extractCriteriaBlocks(projectRoot);
   const state = loadGovernanceState(projectRoot);
+  const storyCount = Object.keys(blocks).length;
 
-  for (const [storyNum, criteriaText] of Object.entries(blocks)) {
-    if (!state.storyHashes[storyNum]) {
-      state.storyHashes[storyNum] = hashText(criteriaText);
-    }
+  if (storyCount === 0) {
+    console.log("[WARN] No stories or acceptance criteria found in docs/foundation/02-spec.md");
+    return false;
   }
 
+  const updatedStories = [];
+  const addedStories = [];
+
+  for (const [storyNum, criteriaText] of Object.entries(blocks)) {
+    const newHash = hashText(criteriaText);
+    if (!state.storyHashes[storyNum]) {
+      addedStories.push(storyNum);
+    } else if (state.storyHashes[storyNum] !== newHash) {
+      updatedStories.push(storyNum);
+    }
+    state.storyHashes[storyNum] = newHash;
+  }
+
+  if (!state.auditLog) {
+    state.auditLog = [];
+  }
+
+  const auditEntry = {
+    timestamp: new Date().toISOString(),
+    approvedBy: approver,
+    addedStories,
+    updatedStories,
+    totalStories: storyCount,
+    stateHash: hashText(JSON.stringify(state.storyHashes)),
+  };
+
+  state.auditLog.push(auditEntry);
+  state.lastApprovedAt = auditEntry.timestamp;
+  state.lastApprovedBy = approver;
+
   saveGovernanceState(state, projectRoot);
+
+  console.log(`[PASS] Specification locked and approved by "${approver}"`);
+  console.log(`       Stories added: ${addedStories.length ? addedStories.join(", ") : "none"}`);
+  console.log(`       Stories updated: ${updatedStories.length ? updatedStories.join(", ") : "none"}`);
+  console.log(`       Audit record: .governance/state.json`);
+  return true;
 }
+
+export const lockCriteria = approveSpec;
 
 /**
  * Verifies that no existing locked story criteria has been tampered with or weakened.
+ * Strictly read-only: NEVER approves or registers newly added stories automatically.
  * @param {string} projectRoot
  * @returns {{ ok: boolean, violations: string[] }}
  */
@@ -118,6 +166,7 @@ export function verifyCriteriaIntegrity(projectRoot = process.cwd()) {
   const state = loadGovernanceState(projectRoot);
   const violations = [];
 
+  // 1. Verify locked stories against current specification
   for (const [storyNum, expectedHash] of Object.entries(state.storyHashes)) {
     const currentBlock = blocks[storyNum];
     if (!currentBlock) {
@@ -127,16 +176,17 @@ export function verifyCriteriaIntegrity(projectRoot = process.cwd()) {
     const currentHash = hashText(currentBlock);
     if (currentHash !== expectedHash) {
       violations.push(
-        `Story ${storyNum}: Acceptance Criteria was modified or weakened! Original criteria is locked by Governance.`,
+        `Story ${storyNum}: Acceptance Criteria was modified or weakened! Original criteria is locked in .governance/state.json.`,
       );
     }
   }
 
-  // Register any newly added stories
-  for (const [storyNum, text] of Object.entries(blocks)) {
+  // 2. Reject unapproved stories: Any story in spec not yet in state.json is a violation
+  for (const [storyNum] of Object.entries(blocks)) {
     if (!state.storyHashes[storyNum]) {
-      state.storyHashes[storyNum] = hashText(text);
-      saveGovernanceState(state, projectRoot);
+      violations.push(
+        `Story ${storyNum}: Acceptance Criteria exists in 02-spec.md but has NOT been approved in .governance/state.json. Run "governance approve:spec" to approve.`,
+      );
     }
   }
 

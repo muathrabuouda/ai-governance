@@ -28,6 +28,7 @@ import { detectStack, runStage } from "../scripts/stack-runner.mjs";
 import {
   verifyCriteriaIntegrity,
   verifyThreatModelCoverage,
+  approveSpec,
   lockCriteria,
 } from "../scripts/state-guardian.mjs";
 
@@ -91,6 +92,20 @@ const COMMANDS = {
   rules: {
     description: "Generate agent instructions (.cursorrules, CLAUDE.md, Copilot)",
     action: () => generateAgentRules(),
+  },
+  "approve:spec": {
+    description: "Formally approve and lock Acceptance Criteria: governance approve:spec [signer-name]",
+    action: () => {
+      const signer = args.join(" ") || "Engineer";
+      approveSpec(signer, process.cwd());
+    },
+  },
+  "lock:criteria": {
+    description: "Alias for approve:spec",
+    action: () => {
+      const signer = args.join(" ") || "Engineer";
+      approveSpec(signer, process.cwd());
+    },
   },
   "install:hooks": {
     description: "Install Git pre-commit enforcement hooks in current repository",
@@ -307,7 +322,7 @@ Usage:
 
 Core Architecture & Decision Commands:
 ${Object.entries(COMMANDS)
-  .filter(([cmd]) => ["init", "status", "new:adr", "list:adr", "new:story", "new:threat", "rules", "install:hooks", "install:ci"].includes(cmd))
+  .filter(([cmd]) => ["init", "status", "new:adr", "list:adr", "new:story", "new:threat", "approve:spec", "rules", "install:hooks", "install:ci"].includes(cmd))
   .map(([name, meta]) => `   ${name.padEnd(16)} ${meta.description}`)
   .join("\n")}
 

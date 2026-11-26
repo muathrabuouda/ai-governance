@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "storyHashes": {
+    "1": "2d7b492c5fbbcc9df77a2f117127750588e912a971158d16f978128d0cf56519",
+    "2": "740b153b2bca8f76613d03f8729eebc7100e30fe7bd614dcd9da62d08230fc0a",
+    "3": "608256325be0229a365f92c2b9f31dbd80af0712bee4912025fefb05e7cb06c5",
+    "4": "3b570ef4708f6e9bd1b527dac4c88382fdf855b6acfdc950698832af58ac2d93"
+  },
+  "auditLog": [
+    {
+      "timestamp": "2026-11-26T17:05:47.512Z",
+      "approvedBy": "Muath R Abu Ouda",
+      "addedStories": [
+        "1",
+        "2",
+        "3",
+        "4"
+      ],
+      "updatedStories": [],
+      "totalStories": 4,
+      "stateHash": "be74fcce54a1c92933531767db158ff2b41b7f62cdd126717c1120e0a7ff3708"
+    }
+  ],
+  "lastVerifiedAt": "2026-11-26T17:05:47.512Z",
+  "lastApprovedAt": "2026-11-26T17:05:47.512Z",
+  "lastApprovedBy": "Muath R Abu Ouda"
+}
