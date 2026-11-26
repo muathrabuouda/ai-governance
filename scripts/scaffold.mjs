@@ -490,3 +490,55 @@ fi
 
   return true;
 }
+
+/**
+ * Generates an automated GitHub Actions CI/CD governance gate workflow in .github/workflows/governance-gate.yml.
+ * Provides an unbypassable server-side boundary for pull requests and main pushes.
+ * @param {string} [projectRoot]
+ */
+export function installCiWorkflow(projectRoot = process.cwd()) {
+  const workflowsDir = resolve(projectRoot, ".github", "workflows");
+  if (!existsSync(workflowsDir)) {
+    mkdirSync(workflowsDir, { recursive: true });
+  }
+
+  const workflowPath = resolve(workflowsDir, "governance-gate.yml");
+
+  const workflowContent = `name: AI Governance Verification Gate
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+concurrency:
+  group: \${{ github.workflow }}-\${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  governance-gate:
+    name: Verification Pipeline & Invariants
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run AI Governance Verification Gate
+        run: |
+          npx github:muathrabuouda/ai-governance check
+`;
+
+  writeFileSync(workflowPath, workflowContent, "utf8");
+  console.log(`\n✅ Governance CI/CD gate installed at .github/workflows/governance-gate.yml`);
+  console.log(`   Pull requests and commits will now be rigorously verified on GitHub Actions.`);
+  return true;
+}

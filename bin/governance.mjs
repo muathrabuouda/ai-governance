@@ -22,6 +22,7 @@ import {
   addThreatModel,
   generateAgentRules,
   installGitHooks,
+  installCiWorkflow,
 } from "../scripts/scaffold.mjs";
 import { detectStack, runStage } from "../scripts/stack-runner.mjs";
 import {
@@ -94,6 +95,10 @@ const COMMANDS = {
   "install:hooks": {
     description: "Install Git pre-commit enforcement hooks in current repository",
     action: () => installGitHooks(),
+  },
+  "install:ci": {
+    description: "Generate GitHub Actions CI/CD verification gate (.github/workflows/governance-gate.yml)",
+    action: () => installCiWorkflow(),
   },
 
   // Verification & Engineering Gates
@@ -302,7 +307,7 @@ Usage:
 
 Core Architecture & Decision Commands:
 ${Object.entries(COMMANDS)
-  .filter(([cmd]) => ["init", "status", "new:adr", "list:adr", "new:story", "new:threat", "rules", "install:hooks"].includes(cmd))
+  .filter(([cmd]) => ["init", "status", "new:adr", "list:adr", "new:story", "new:threat", "rules", "install:hooks", "install:ci"].includes(cmd))
   .map(([name, meta]) => `   ${name.padEnd(16)} ${meta.description}`)
   .join("\n")}
 
