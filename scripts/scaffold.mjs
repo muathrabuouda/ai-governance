@@ -532,6 +532,24 @@ export function installCiWorkflow(projectRoot = process.cwd(), force = false) {
   const hasGradle =
     existsSync(resolve(projectRoot, "build.gradle")) ||
     existsSync(resolve(projectRoot, "build.gradle.kts"));
+  const hasPython =
+    existsSync(resolve(projectRoot, "requirements.txt")) ||
+    existsSync(resolve(projectRoot, "pyproject.toml"));
+
+  // Detect PHP version from composer.json
+  let phpVersion = "8.4";
+  if (hasComposer) {
+    try {
+      const composer = JSON.parse(readFileSync(resolve(projectRoot, "composer.json"), "utf8"));
+      const phpReq = composer?.require?.php;
+      if (phpReq) {
+        const match = phpReq.match(/(\d+\.\d+)/);
+        if (match) phpVersion = match[1];
+      }
+    } catch {
+      // fallback to 8.4
+    }
+  }
 
   let stackSteps = "";
 
@@ -540,7 +558,7 @@ export function installCiWorkflow(projectRoot = process.cwd(), force = false) {
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.4'
+          php-version: '${phpVersion}'
           extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite
           coverage: none
 
@@ -574,6 +592,22 @@ export function installCiWorkflow(projectRoot = process.cwd(), force = false) {
 `;
   }
 
+  if (hasPython) {
+    stackSteps += `
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+`;
+  }
+
   const workflowContent = `name: AI Governance Verification Gate
 
 on:
@@ -596,6 +630,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Enforce Gitleaks Security Audit
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js Environment
         uses: actions/setup-node@v4
