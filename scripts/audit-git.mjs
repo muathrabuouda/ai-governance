@@ -63,14 +63,52 @@ export function validateCommitMessage(message) {
 }
 
 /**
- * Runs Git audit across recent commits and repository state.
+ * Runs Git audit across commits and repository state.
+ * Audits feature branch commits against main/master, or recent commits on the current branch.
+ * @param {string} [targetDir]
+ * @param {number} [fallbackLimit]
  */
-export function runGitAudit(limit = 5) {
-  console.log(`Auditing last ${limit} commits for Conventional Commit compliance...\n`);
+export function runGitAudit(targetDir = process.cwd(), fallbackLimit = 10) {
+  let gitArgs = "";
+  let auditScope = "";
+
+  try {
+    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+      cwd: targetDir,
+      encoding: "utf8",
+    }).trim();
+
+    let baseRef = null;
+    try {
+      execSync("git rev-parse --verify origin/main", { cwd: targetDir, stdio: "ignore" });
+      baseRef = "origin/main";
+    } catch {
+      try {
+        execSync("git rev-parse --verify origin/master", { cwd: targetDir, stdio: "ignore" });
+        baseRef = "origin/master";
+      } catch {
+        // base not found
+      }
+    }
+
+    if (baseRef && branch !== "main" && branch !== "master" && branch !== "HEAD") {
+      gitArgs = `${baseRef}..HEAD`;
+      auditScope = `branch "${branch}" commits against ${baseRef}`;
+    } else {
+      gitArgs = `-n ${fallbackLimit}`;
+      auditScope = `last ${fallbackLimit} commits on branch "${branch}"`;
+    }
+  } catch {
+    gitArgs = `-n ${fallbackLimit}`;
+    auditScope = `last ${fallbackLimit} commits`;
+  }
+
+  console.log(`Auditing ${auditScope} for Conventional Commit compliance...\n`);
 
   let commitLog = "";
   try {
-    commitLog = execSync(`git log -n ${limit} --pretty=format:"%h%x09%s"`, {
+    commitLog = execSync(`git log ${gitArgs} --pretty=format:"%h%x09%s"`, {
+      cwd: targetDir,
       encoding: "utf8",
     });
   } catch {
@@ -82,6 +120,11 @@ export function runGitAudit(limit = 5) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+
+  if (commits.length === 0) {
+    console.log("No commits found in the audited range.");
+    return { passed: true, total: 0, failed: 0 };
+  }
 
   let failedCount = 0;
 
@@ -113,6 +156,7 @@ export function runGitAudit(limit = 5) {
 
 // CLI Execution entry
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
-  const result = runGitAudit(5);
+  const targetDir = process.argv[2] ? resolve(process.argv[2]) : process.cwd();
+  const result = runGitAudit(targetDir);
   process.exit(result.passed ? 0 : 1);
 }
