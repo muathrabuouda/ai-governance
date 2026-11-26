@@ -10,7 +10,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const TARGET_EXTENSIONS = new Set([".vue", ".tsx", ".jsx", ".blade.php", ".html", ".css", ".scss"]);
+const TARGET_EXTENSIONS = new Set([".vue", ".tsx", ".jsx", ".blade.php", ".php", ".html", ".css", ".scss"]);
 const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "vendor", "storage", ".governance"]);
 
 // Official palette design tokens
@@ -24,6 +24,18 @@ export const OFFICIAL_PALETTE = {
 };
 
 export const APPROVED_FONTS = ["IBM Plex Sans Arabic", "IBM Plex Sans", "IBM Plex Mono"];
+
+/**
+ * Checks whether a file path qualifies as a target frontend source file.
+ * Handles compound extensions such as .blade.php correctly.
+ * @param {string} filePath
+ * @returns {boolean}
+ */
+export function isTargetSourceFile(filePath) {
+  if (filePath.endsWith(".blade.php")) return true;
+  const ext = extname(filePath).toLowerCase();
+  return TARGET_EXTENSIONS.has(ext);
+}
 
 /**
  * Recursively find target source files.
@@ -40,7 +52,7 @@ function findSourceFiles(dir, fileList = []) {
       const stat = statSync(fullPath);
       if (stat.isDirectory()) {
         findSourceFiles(fullPath, fileList);
-      } else if (TARGET_EXTENSIONS.has(extname(fullPath))) {
+      } else if (isTargetSourceFile(fullPath)) {
         fileList.push(fullPath);
       }
     }
@@ -51,7 +63,18 @@ function findSourceFiles(dir, fileList = []) {
 }
 
 /**
+ * Converts a string character index into a 1-based line number.
+ * @param {string} content
+ * @param {number} index
+ * @returns {number}
+ */
+function getLineNumber(content, index) {
+  return content.substring(0, index).split("\n").length;
+}
+
+/**
  * Audits a single file for design system compliance.
+ * Supports multi-line HTML tags, color role distribution, typography, and accessibility guardrails.
  * @param {string} filePath
  * @returns {Array<{ line: number, message: string, severity: 'error' | 'warning' }>}
  */
@@ -72,12 +95,7 @@ export function auditFileDesign(filePath) {
   // 3. Unauthorized font families
   const unapprovedFontRegex = /font-family\s*:\s*['"]?([^'";\n]+)['"]?/i;
 
-  // 4. Accessibility: <img> without alt
-  const imgWithoutAltRegex = /<img\b(?![^>]*\balt=)[^>]*>/i;
-
-  // 5. Accessibility: <button> with only icon / no accessible text or aria-label
-  const buttonNoAriaRegex = /<button\b(?![^>]*\baria-label=)[^>]*>\s*<(?:svg|i)\b[^>]*>\s*<\/(?:svg|i)>\s*<\/button>/i;
-
+  // Per-line checks
   lines.forEach((line, index) => {
     const lineNum = index + 1;
 
@@ -95,7 +113,6 @@ export function auditFileDesign(filePath) {
     let hexMatch;
     while ((hexMatch = rawHexRegex.exec(line)) !== null) {
       const hex = hexMatch[1].toLowerCase();
-      // Allow pure black/white shortcuts if needed, otherwise verify against official tokens
       if (!approvedHexSet.has(hex) && hex !== "000" && hex !== "000000" && hex !== "fff" && hex !== "ffffff") {
         violations.push({
           line: lineNum,
@@ -120,25 +137,46 @@ export function auditFileDesign(filePath) {
         });
       }
     }
-
-    // Rule 4: Accessibility <img> without alt
-    if (imgWithoutAltRegex.test(line)) {
-      violations.push({
-        line: lineNum,
-        message: "Accessibility Violation: <img> tag is missing an 'alt' attribute for screen readers.",
-        severity: "warning",
-      });
-    }
-
-    // Rule 5: Accessibility <button> icon-only without aria-label
-    if (buttonNoAriaRegex.test(line)) {
-      violations.push({
-        line: lineNum,
-        message: "Accessibility Violation: Icon-only <button> missing 'aria-label' attribute.",
-        severity: "warning",
-      });
-    }
   });
+
+  // Multi-line HTML/Vue element parsing for Accessibility
+
+  // Rule 4: Multi-line <img> without alt attribute
+  const imgRegex = /<img\b([^>]*?)>/gi;
+  let imgMatch;
+  while ((imgMatch = imgRegex.exec(content)) !== null) {
+    const attrs = imgMatch[1];
+    if (!/\balt\s*=/i.test(attrs)) {
+      violations.push({
+        line: getLineNumber(content, imgMatch.index),
+        message: "Accessibility Violation: <img> element is missing required 'alt' attribute.",
+        severity: "warning",
+      });
+    }
+  }
+
+  // Rule 5: Multi-line <button> with icon-only content missing accessible label
+  const buttonRegex = /<button\b([^>]*?)>([\s\S]*?)<\/button>/gi;
+  let btnMatch;
+  while ((btnMatch = buttonRegex.exec(content)) !== null) {
+    const attrs = btnMatch[1];
+    const innerContent = btnMatch[2].trim();
+    const hasOnlyIcon =
+      /^<(?:svg|i)\b[\s\S]*?<\/(?:svg|i)>$/i.test(innerContent) ||
+      /^<(?:svg|i)\b[^>]*\/>$/i.test(innerContent);
+
+    if (hasOnlyIcon) {
+      const hasAria = /\b(aria-label|aria-labelledby|title)\s*=/i.test(attrs);
+      if (!hasAria) {
+        violations.push({
+          line: getLineNumber(content, btnMatch.index),
+          message:
+            "Accessibility Violation: Icon-only <button> is missing an accessible 'aria-label' or 'title' attribute.",
+          severity: "warning",
+        });
+      }
+    }
+  }
 
   return violations;
 }
