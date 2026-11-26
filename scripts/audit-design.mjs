@@ -192,7 +192,7 @@ export function runDesignAudit(targetDir = process.cwd()) {
 
   if (files.length === 0) {
     console.log("No frontend template or CSS files found to audit.");
-    return { passed: true, violationsCount: 0 };
+    return { passed: true, violationsCount: 0, noFiles: true };
   }
 
   let errorCount = 0;
@@ -226,5 +226,8 @@ export function runDesignAudit(targetDir = process.cwd()) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const targetDir = process.argv[2] ? resolve(process.argv[2]) : process.cwd();
   const result = runDesignAudit(targetDir);
+  if (result.noFiles) {
+    process.exit(2);
+  }
   process.exit(result.passed ? 0 : 1);
 }
