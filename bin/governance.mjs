@@ -23,6 +23,12 @@ import {
   generateAgentRules,
   installGitHooks,
 } from "../scripts/scaffold.mjs";
+import { detectStack, runStage } from "../scripts/stack-runner.mjs";
+import {
+  verifyCriteriaIntegrity,
+  verifyThreatModelCoverage,
+  lockCriteria,
+} from "../scripts/state-guardian.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -92,79 +98,101 @@ const COMMANDS = {
 
   // Verification & Engineering Gates
   check: {
-    description: "Run verification gates on current project: secrets, git audit, design tokens",
+    description: "Run complete verification pipeline: stack tests, lint, format, secrets, git audit",
     action: () => {
-      const isInternalRoot = process.cwd() === rootDir;
-      if (isInternalRoot) {
-        runNpmScript("check");
-        return;
-      }
+      console.log(`\n================================================================`);
+      console.log(`   GOVERNANCE VERIFICATION PIPELINE`);
+      console.log(`   Target Workspace: ${process.cwd()}`);
+      console.log(`================================================================`);
 
-      console.log(`\n🛡️  Running Governance Verification Gates in: ${process.cwd()}...\n`);
+      const stack = detectStack(process.cwd());
+      console.log(`\n🔍 Detected Stack: ${stack.name}`);
       let failed = false;
 
-      // 1. Secrets Scan in current project
-      console.log("➡️  Scanning for secret leaks...");
+      // 1. Acceptance Criteria Integrity Gate (Spec Lock)
+      console.log("\n➡️  [GATE 1/8] Verifying Specification & Acceptance Criteria Integrity...");
+      const criteriaCheck = verifyCriteriaIntegrity(process.cwd());
+      if (!criteriaCheck.ok) {
+        for (const v of criteriaCheck.violations) {
+          console.error(`   ✗ ${v}`);
+        }
+        failed = true;
+      } else {
+        console.log("   ✓ Acceptance Criteria integrity intact (no tampering detected)");
+      }
+
+      // 2. Threat Model Coverage Gate
+      console.log("\n➡️  [GATE 2/8] Auditing Threat Model coverage for active stories...");
+      const threatCheck = verifyThreatModelCoverage(process.cwd());
+      if (!threatCheck.ok) {
+        for (const w of threatCheck.warnings) {
+          console.warn(`   ⚠️  ${w}`);
+        }
+      } else {
+        console.log("   ✓ Threat model coverage verified for active stories");
+      }
+
+      // 3. Secrets Scan in current project
+      console.log("\n➡️  [GATE 3/8] Scanning for secret leaks...");
       const secretsResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/scan-secrets.mjs"), process.cwd()], {
         stdio: "inherit",
       });
       if (secretsResult.status !== 0) failed = true;
 
-      // 2. Audit Git commits
-      console.log("\n➡️  Auditing Git commits...");
+      // 4. Audit Git commits
+      console.log("\n➡️  [GATE 4/8] Auditing Git commits...");
       const gitResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-git.mjs")], {
         cwd: process.cwd(),
         stdio: "inherit",
       });
       if (gitResult.status !== 0) failed = true;
 
-      // 3. Design System Audit (if UI files exist)
-      console.log("\n➡️  Auditing UI Design Tokens...");
+      // 5. Formatting Verification
+      if (stack.formatCmd) {
+        console.log(`\n➡️  [GATE 5/8] Verifying Code Formatting (${stack.name})...`);
+        const ok = runStage("Code Formatting", stack.formatCmd.cmd, stack.formatCmd.args, process.cwd());
+        if (!ok) failed = true;
+      } else {
+        console.log(`\nℹ️  [GATE 5/8] Code Formatting: No project formatter configured (skipped)`);
+      }
+
+      // 6. Static Analysis / Linter
+      if (stack.lintCmd) {
+        console.log(`\n➡️  [GATE 6/8] Running Static Analysis & Lint (${stack.name})...`);
+        const ok = runStage("Static Analysis", stack.lintCmd.cmd, stack.lintCmd.args, process.cwd());
+        if (!ok) failed = true;
+      } else {
+        console.log(`\nℹ️  [GATE 6/8] Static Analysis: No project linter configured (skipped)`);
+      }
+
+      // 7. Automated Test Suite Execution
+      if (stack.testCmd) {
+        console.log(`\n➡️  [GATE 7/8] Executing Automated Test Suite (${stack.name})...`);
+        const ok = runStage("Test Suite", stack.testCmd.cmd, stack.testCmd.args, process.cwd());
+        if (!ok) failed = true;
+      } else {
+        console.log(`\nℹ️  [GATE 7/8] Test Suite: No test runner configured (skipped)`);
+      }
+
+      // 8. Design System Audit (if UI files exist)
+      console.log("\n➡️  [GATE 8/8] Auditing UI Design Tokens...");
       const designResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-design.mjs"), process.cwd()], {
         stdio: "inherit",
       });
       if (designResult.status !== 0) failed = true;
 
+      console.log(`\n================================================================`);
       if (failed) {
-        console.error("\n❌ Governance verification gates failed! Resolve issues before committing.");
+        console.error(`❌ GOVERNANCE FAILED: One or more verification gates failed!`);
+        console.error(`   Fix violations before committing or pushing code.`);
+        console.log(`================================================================\n`);
         process.exit(1);
       } else {
-        console.log("\n✅ All Governance verification gates passed successfully!");
+        console.log(`✅ GOVERNANCE PASSED: All active verification gates passed!`);
+        console.log(`================================================================\n`);
         process.exit(0);
       }
     },
-  },
-  test: {
-    description: "Execute automated unit, contract, and audit tests",
-    action: () => runNpmScript("test"),
-  },
-  mutate: {
-    description: "Run mutation testing in golden-project to verify test suite quality",
-    action: () => runScript("golden-project/scripts/mutate.mjs"),
-  },
-  context: {
-    description: "Inspect context window size and token footprint across rulebooks",
-    action: () => runScript("scripts/context-size.mjs"),
-  },
-  map: {
-    description: "Generate structured repository architectural map",
-    action: () => runScript("scripts/repo-map.mjs"),
-  },
-  story: {
-    description: "View golden project story specification: governance story <number>",
-    action: () => runScript("golden-project/scripts/story.mjs", args),
-  },
-  bench: {
-    description: "Run performance benchmarks and query count verifications in golden-project",
-    action: () => runScript("golden-project/scripts/bench.mjs"),
-  },
-  secrets: {
-    description: "Scan codebase for accidental secret or token leaks",
-    action: () => runNpmScript("secrets"),
-  },
-  deps: {
-    description: "Verify that all dependencies are strictly pinned and approved",
-    action: () => runNpmScript("deps"),
   },
   "audit:git": {
     description: "Audit git commits against Conventional Commits standards",
@@ -173,6 +201,46 @@ const COMMANDS = {
   "audit:design": {
     description: "Audit UI templates for Design System rules (palette, 70-20-10, no green bg)",
     action: () => runScript("scripts/audit-design.mjs", args),
+  },
+  secrets: {
+    description: "Scan codebase for accidental secret or token leaks",
+    action: () => runScript("scripts/scan-secrets.mjs", [process.cwd()]),
+  },
+  deps: {
+    description: "Verify that all dependencies are strictly pinned and approved",
+    action: () => runScript("scripts/check-deps.mjs", [process.cwd()]),
+  },
+  context: {
+    description: "Inspect context window size and token footprint across rulebooks",
+    action: () => runScript("scripts/context-size.mjs"),
+  },
+  map: {
+    description: "Generate structured repository architectural map",
+    action: () => runScript("scripts/repo-map.mjs", [process.cwd()]),
+  },
+
+  // Reference Benchmark & Mutation Demos (internal reference implementation)
+  "demo:mutate": {
+    description: "Run mutation testing demo on reference project",
+    action: () => {
+      const demoScript = resolve(rootDir, "golden-project/scripts/mutate.mjs");
+      if (existsSync(demoScript)) {
+        runScript("golden-project/scripts/mutate.mjs");
+      } else {
+        console.log("Mutation demo is available in the source repository.");
+      }
+    },
+  },
+  "demo:bench": {
+    description: "Run performance benchmark demo on reference project",
+    action: () => {
+      const demoScript = resolve(rootDir, "golden-project/scripts/bench.mjs");
+      if (existsSync(demoScript)) {
+        runScript("golden-project/scripts/bench.mjs");
+      } else {
+        console.log("Benchmark demo is available in the source repository.");
+      }
+    },
   },
 
   // Methodology Prompts
@@ -240,13 +308,13 @@ ${Object.entries(COMMANDS)
 
 Verification & Engineering Gates:
 ${Object.entries(COMMANDS)
-  .filter(([cmd]) => ["check", "test", "mutate", "audit:git", "audit:design", "secrets", "deps", "bench", "map", "context"].includes(cmd))
+  .filter(([cmd]) => ["check", "audit:git", "audit:design", "secrets", "deps", "map", "context"].includes(cmd))
   .map(([name, meta]) => `   ${name.padEnd(16)} ${meta.description}`)
   .join("\n")}
 
-Methodology & Prompts:
+Reference Demos & Methodology:
 ${Object.entries(COMMANDS)
-  .filter(([cmd]) => ["prompt", "story"].includes(cmd))
+  .filter(([cmd]) => ["prompt", "demo:mutate", "demo:bench"].includes(cmd))
   .map(([name, meta]) => `   ${name.padEnd(16)} ${meta.description}`)
   .join("\n")}
 
