@@ -598,13 +598,15 @@ export function installCiWorkflow(projectRoot = process.cwd(), force = false) {
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
 
-      - name: Install Python Dependencies
+      - name: Install Python Dependencies & Test Runners
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
+          pip install pytest mypy
 `;
   }
 
