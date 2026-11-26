@@ -99,21 +99,25 @@ const COMMANDS = {
     action: () => generateAgentRules(),
   },
   "approve:spec": {
-    description: "Formally approve and lock Acceptance Criteria: governance approve:spec [signer-name] [--prune]",
+    description: "Formally approve and lock Acceptance Criteria: governance approve:spec [signer-name] [--prune] [--actor=<name>]",
     action: () => {
       const isPrune = args.includes("--prune");
-      const filtered = args.filter((a) => a !== "--prune");
+      const actorFlag = args.find((a) => a.startsWith("--actor="));
+      const actor = actorFlag ? actorFlag.replace("--actor=", "").trim() : undefined;
+      const filtered = args.filter((a) => a !== "--prune" && !a.startsWith("--actor="));
       const signer = filtered.join(" ") || "Engineer";
-      approveSpec(signer, { prune: isPrune }, process.cwd());
+      approveSpec(signer, { prune: isPrune, actor }, process.cwd());
     },
   },
   "lock:criteria": {
     description: "Alias for approve:spec",
     action: () => {
       const isPrune = args.includes("--prune");
-      const filtered = args.filter((a) => a !== "--prune");
+      const actorFlag = args.find((a) => a.startsWith("--actor="));
+      const actor = actorFlag ? actorFlag.replace("--actor=", "").trim() : undefined;
+      const filtered = args.filter((a) => a !== "--prune" && !a.startsWith("--actor="));
       const signer = filtered.join(" ") || "Engineer";
-      approveSpec(signer, { prune: isPrune }, process.cwd());
+      approveSpec(signer, { prune: isPrune, actor }, process.cwd());
     },
   },
   "deprecate:story": {

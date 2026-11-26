@@ -3,10 +3,6 @@ name: Approve Specification
 on:
   workflow_dispatch:
     inputs:
-      approver_name:
-        description: "Authorized Human Approver Name & Email"
-        required: true
-        default: "Muath R Abu Ouda <muathrabuouda@hotmail.com>"
       reason:
         description: "Reason or Release Milestone for Approval"
         required: true
@@ -33,23 +29,62 @@ jobs:
         with:
           node-version: 22
 
-      - name: Configure Git Committer Identity
+      - name: Verify GitHub Actor Authorization
+        env:
+          ACTOR: ${{ github.actor }}
         run: |
-          git config user.name "AI Governance Approver"
-          git config user.email "governance@muathrabuouda.local"
+          node -e '
+            const fs = require("fs");
+            const approversFile = ".governance/authorized-approvers.json";
+            if (!fs.existsSync(approversFile)) {
+              console.error("[FAIL] Missing .governance/authorized-approvers.json");
+              process.exit(1);
+            }
+            const config = JSON.parse(fs.readFileSync(approversFile, "utf8"));
+            const allowed = config.allowedGitHubActors || [];
+            const actor = process.env.ACTOR;
+            if (!allowed.some(a => a.toLowerCase() === actor.toLowerCase())) {
+              console.error(`[FAIL] Security Violation: GitHub Actor "${actor}" is not authorized to approve specifications!`);
+              process.exit(1);
+            }
+            console.log(`[PASS] GitHub Actor "${actor}" verified and authorized.`);
+          '
+
+      - name: Configure GPG Signing Key (if secret provided)
+        env:
+          GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          if [ -n "$GPG_KEY" ]; then
+            echo "$GPG_KEY" | gpg --batch --import
+            KEY_ID=$(gpg --list-secret-keys --keyid-format=long | grep sec | head -1 | awk '{print $2}' | cut -d'/' -f2)
+            git config --global user.signingkey "$KEY_ID"
+            git config --global commit.gpgsign true
+            echo "GPG Signing Key configured: $KEY_ID"
+          else
+            echo "[INFO] No GPG_PRIVATE_KEY secret configured in repository."
+          fi
+
+      - name: Configure Git Committer Identity
+        env:
+          ACTOR: ${{ github.actor }}
+        run: |
+          git config user.name "$ACTOR (via GitHub Actions)"
+          git config user.email "$ACTOR@users.noreply.github.com"
 
       - name: Cryptographically Lock Acceptance Criteria
         env:
-          APPROVER_NAME: ${{ inputs.approver_name }}
+          ACTOR: ${{ github.actor }}
           APPROVAL_REASON: ${{ inputs.reason }}
         run: |
-          node bin/governance.mjs approve:spec "$APPROVER_NAME"
+          node bin/governance.mjs approve:spec "$ACTOR <$ACTOR@users.noreply.github.com>" --actor="$ACTOR"
 
       - name: Commit State and Push Immutable Tag
         env:
-          APPROVER_NAME: ${{ inputs.approver_name }}
+          ACTOR: ${{ github.actor }}
+          APPROVAL_REASON: ${{ inputs.reason }}
         run: |
           git add .governance/state.json
-          git commit -m "chore(spec): lock acceptance criteria approved by $APPROVER_NAME [skip ci]" || echo "No state changes"
+          git commit -m "chore(spec): lock acceptance criteria approved by $ACTOR - $APPROVAL_REASON" || echo "No state changes"
           git push origin HEAD:main
           git push origin --tags
