@@ -395,6 +395,110 @@ Some descriptive text without any table.
       );
     });
 
+    test("rejects short 32-bit key IDs (< 16 hex chars) to prevent Evil32 collision attacks", () => {
+      const fullFingerprint = "4A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B";
+      const short32BitId = "3E4F5A6B"; // Only 8 hex chars (32-bit) - vulnerable to Evil32 collision
+
+      // Candidate provides only 8-char short key ID - MUST be rejected
+      assert.equal(
+        isKeyFingerprintAuthorized({ signerKeyId: short32BitId }, [fullFingerprint]),
+        false,
+        "32-bit short key IDs must never be accepted to prevent Evil32 collision attacks",
+      );
+
+      // Allowed list contains only 8-char short key ID - MUST be rejected
+      assert.equal(
+        isKeyFingerprintAuthorized({ signerFingerprint: fullFingerprint }, [short32BitId]),
+        false,
+        "Allowed list with 32-bit short key IDs must be ignored to prevent collision attacks",
+      );
+
+      // 64-bit Long Key ID (16 hex chars) is accepted
+      const long64BitId = "9A0B1C2D3E4F5A6B";
+      assert.equal(
+        isKeyFingerprintAuthorized({ signerKeyId: long64BitId }, [fullFingerprint]),
+        true,
+        "64-bit Long Key ID (16 hex chars) is cryptographically safe and accepted",
+      );
+    });
+
+    test("detects tampering when headAnchor is deleted or missing in strict mode", () => {
+      const block0 = {
+        index: 0,
+        timestamp: new Date().toISOString(),
+        action: "APPROVE_SPEC",
+        author: "Tester",
+        previousHash: "0000000000000000000000000000000000000000000000000000000000000000",
+        details: {},
+        attestation: {
+          commitSha: "1111111111111111111111111111111111111111",
+          treeHash: "2222222222222222222222222222222222222222",
+          signatureStatus: "G",
+        },
+      };
+      block0.hash = calculateBlockHash(block0);
+
+      // State without headAnchor
+      const stateWithoutAnchor = {
+        version: "1.0.0",
+        storyHashes: {},
+        auditLog: [block0],
+      };
+
+      // In non-strict mode without git repo, it passes basic chain check
+      const nonStrictCheck = verifyAuditChain(stateWithoutAnchor, null, { strict: false });
+      assert.equal(nonStrictCheck.ok, true);
+
+      // In strict mode, missing headAnchor MUST fail immediately
+      const strictCheck = verifyAuditChain(stateWithoutAnchor, null, { strict: true });
+      assert.equal(strictCheck.ok, false);
+      assert.ok(strictCheck.violations.some((v) => v.includes('Missing "headAnchor"')));
+
+      // Tampered headAnchor MUST also fail
+      const stateWithWrongAnchor = {
+        ...stateWithoutAnchor,
+        headAnchor: "invalid_anchor_hash_value",
+      };
+      const mismatchCheck = verifyAuditChain(stateWithWrongAnchor, null, { strict: true });
+      assert.equal(mismatchCheck.ok, false);
+      assert.ok(mismatchCheck.violations.some((v) => v.includes("head anchor mismatch")));
+    });
+
+    test("validates github.actor against allowedGitHubActors during spec approval", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-actor-test-"));
+      try {
+        const docsDir = join(tempDir, "docs", "foundation");
+        const govDir = join(tempDir, ".governance");
+        mkdirSync(docsDir, { recursive: true });
+        mkdirSync(govDir, { recursive: true });
+
+        writeFileSync(
+          join(docsDir, "02-spec.md"),
+          `# Specification\n### Story 1: Actor Test\n| ID | Given | When | Then |\n| :-- | :--- | :--- | :--- |\n| 1.1 | Valid actor | Approves | Passes |\n`,
+          "utf8",
+        );
+
+        writeFileSync(
+          join(govDir, "authorized-approvers.json"),
+          JSON.stringify({
+            allowedGitHubActors: ["muathrabuouda"],
+            allowedSigners: ["Muath R Abu Ouda <muathrabuouda@hotmail.com>"],
+          }),
+          "utf8",
+        );
+
+        // Unauthorized actor MUST be rejected
+        const unauthorizedResult = approveSpec("Attacker", { actor: "unauthorized-hacker" }, tempDir);
+        assert.equal(unauthorizedResult, false, "Unauthorized GitHub actor must be rejected");
+
+        // Authorized actor is accepted in non-strict mode
+        const authorizedResult = approveSpec("Muath R Abu Ouda <muathrabuouda@hotmail.com>", { actor: "muathrabuouda" }, tempDir);
+        assert.equal(authorizedResult, true, "Authorized GitHub actor must be accepted");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
     test("rejects approver identifiers containing command injection characters", () => {
       const tempDir = mkdtempSync(join(tmpdir(), "gov-injection-test-"));
       try {
