@@ -222,7 +222,9 @@ export function normalizeKey(key) {
 
 /**
  * Checks whether a commit's signer key matches an allowed list of fingerprints or key IDs.
- * Correctly matches full fingerprints (40 hex chars), primary key fingerprints, and key IDs.
+ * Correctly matches full fingerprints (40 or 64 hex chars), primary key fingerprints,
+ * and 64-bit long key IDs (16 hex chars).
+ * Short 32-bit key IDs (8 hex chars) are strictly rejected to prevent Evil32 collision attacks.
  *
  * @param {object} gitMeta
  * @param {string[]} allowedKeys
@@ -244,17 +246,25 @@ export function isKeyFingerprintAuthorized(gitMeta, allowedKeys = []) {
     const allowed = normalizeKey(rawAllowed);
     if (!allowed) continue;
 
+    // Reject short keys (< 16 hex chars) in allowed list to prevent Evil32 32-bit ID collisions
+    if (allowed.length < 16) {
+      continue;
+    }
+
     for (const candidate of candidateKeys) {
+      // Reject candidate keys shorter than 16 hex characters (prevents Evil32 collisions)
+      if (candidate.length < 16) {
+        continue;
+      }
+
       if (candidate === allowed) {
         return true;
       }
-      // If allowed is full fingerprint (40 hex) and candidate is key ID (8 or 16 hex), match suffix
-      if (allowed.length >= 16 && candidate.length >= 8 && allowed.endsWith(candidate)) {
-        return true;
-      }
-      // If candidate is full fingerprint (40 hex) and allowed is key ID (8 or 16 hex), match suffix
-      if (candidate.length >= 16 && allowed.length >= 8 && candidate.endsWith(allowed)) {
-        return true;
+      // If allowed is full fingerprint (40+ hex) and candidate is long key ID (16+ hex), match suffix
+      if (allowed.length >= 16 && candidate.length >= 16) {
+        if (allowed.endsWith(candidate) || candidate.endsWith(allowed)) {
+          return true;
+        }
       }
     }
   }
@@ -338,47 +348,53 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
   }
 
   // Cross-verify state.headAnchor against the latest block attestation
-  if (state.headAnchor && state.auditLog.length > 0) {
-    const lastBlock = state.auditLog[state.auditLog.length - 1];
-    const commitSha = lastBlock.attestation?.commitSha || "0000000000000000000000000000000000000000";
-    const treeHash = lastBlock.attestation?.treeHash || "0000000000000000000000000000000000000000";
-    const expectedAnchor = hashText(`${lastBlock.hash}:${commitSha}:${treeHash}`);
-    if (state.headAnchor !== expectedAnchor) {
-      violations.push(
-        `Audit log head anchor mismatch! Tampering detected between state.json and external git tree anchor.`,
-      );
-    }
-
-    // Cross-verify immutable Git Tag Anchor if in a Git repository
-    if (projectRoot) {
-      const gitMeta = getGitAttestation(projectRoot);
-      if (gitMeta.isGit) {
-        const expectedTag = lastBlock.attestation?.tagAnchor?.tag || `governance/spec-v${lastBlock.index}`;
-        let tagSha = "";
-        try {
-          tagSha = execSync(`git rev-parse -q --verify "refs/tags/${expectedTag}"`, {
-            cwd: projectRoot,
-            stdio: ["ignore", "pipe", "ignore"],
-            encoding: "utf8",
-          }).trim();
-        } catch {
-          // Tag not found
-        }
-
-        if (!tagSha) {
-          if (options.strict || options.requireTagAnchor) {
-            violations.push(
-              `Immutable Git Tag anchor "refs/tags/${expectedTag}" is missing from git object database! Strict policy mandates verified tag anchors.`,
-            );
-          }
-        }
+  if (state.auditLog.length > 0) {
+    if (!state.headAnchor) {
+      if (options.strict) {
+        violations.push(
+          `Missing "headAnchor" in governance state! Strict policy requires a cryptographically computed headAnchor when an audit log exists.`,
+        );
+      }
+    } else {
+      const lastBlock = state.auditLog[state.auditLog.length - 1];
+      const commitSha = lastBlock.attestation?.commitSha || "0000000000000000000000000000000000000000";
+      const treeHash = lastBlock.attestation?.treeHash || "0000000000000000000000000000000000000000";
+      const expectedAnchor = hashText(`${lastBlock.hash}:${commitSha}:${treeHash}`);
+      if (state.headAnchor !== expectedAnchor) {
+        violations.push(
+          `Audit log head anchor mismatch! Tampering detected between state.json and external git tree anchor.`,
+        );
       }
     }
+  }
 
-    // In strict mode, verify that the commit modifying .governance/state.json is cryptographically signed by an authorized key
-    if (options.strict && projectRoot) {
-      const gitMeta = getGitAttestation(projectRoot);
-      if (gitMeta.isGit) {
+  // Cross-verify immutable Git Tag Anchor and Commit Signature unconditionally if in a Git repository
+  if (projectRoot && state.auditLog.length > 0) {
+    const lastBlock = state.auditLog[state.auditLog.length - 1];
+    const gitMeta = getGitAttestation(projectRoot);
+    if (gitMeta.isGit) {
+      const expectedTag = lastBlock.attestation?.tagAnchor?.tag || `governance/spec-v${lastBlock.index}`;
+      let tagSha = "";
+      try {
+        tagSha = execSync(`git rev-parse -q --verify "refs/tags/${expectedTag}"`, {
+          cwd: projectRoot,
+          stdio: ["ignore", "pipe", "ignore"],
+          encoding: "utf8",
+        }).trim();
+      } catch {
+        // Tag not found
+      }
+
+      if (!tagSha) {
+        if (options.strict || options.requireTagAnchor) {
+          violations.push(
+            `Immutable Git Tag anchor "refs/tags/${expectedTag}" is missing from git object database! Strict policy mandates verified tag anchors.`,
+          );
+        }
+      }
+
+      // In strict mode, verify that the commit modifying .governance/state.json is cryptographically signed by an authorized key
+      if (options.strict) {
         try {
           const stateCommitData = execSync('git log -1 --format="%H|%G?|%GS|%GK|%GF|%GP" -- .governance/state.json', {
             cwd: projectRoot,
@@ -554,8 +570,8 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
     resolvedAuthor = `${gitMeta.userName} <${gitMeta.userEmail}>`;
   }
 
-  // Sanitize approver name to reject shell metacharacters and control characters
-  if (typeof approver === "string" && /[;&|`$\n\r<>]/.test(approver)) {
+  // Sanitize approver name to reject shell metacharacters and control characters (allows standard Name <email> format)
+  if (typeof approver === "string" && /[;&|`$\n\r]/.test(approver)) {
     console.error("[FAIL] Security Violation: Approver identifier contains illegal shell or control characters.");
     return false;
   }
@@ -568,6 +584,19 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
       authData = JSON.parse(readFileSync(authFile, "utf8"));
     } catch {
       // Non-fatal parse fallback
+    }
+  }
+
+  // Verify GitHub actor authorization if provided
+  if (options.actor && authData?.allowedGitHubActors && authData.allowedGitHubActors.length > 0) {
+    const isActorAllowed = authData.allowedGitHubActors.some(
+      (a) => a.toLowerCase() === String(options.actor).toLowerCase(),
+    );
+    if (!isActorAllowed) {
+      console.error(
+        `[FAIL] Security Violation: GitHub actor "${options.actor}" is not authorized. Not found in allowedGitHubActors in authorized-approvers.json.`,
+      );
+      return false;
     }
   }
 
@@ -651,8 +680,10 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
         (a) =>
           isKeyFingerprintAuthorized(gitMeta, [a]) ||
           a.toLowerCase() === resolvedAuthor.toLowerCase() ||
+          a.toLowerCase().startsWith(resolvedAuthor.toLowerCase() + " <") ||
           (gitMeta.userEmail && a.toLowerCase() === gitMeta.userEmail.toLowerCase()) ||
-          (gitMeta.userName && a.toLowerCase() === gitMeta.userName.toLowerCase()),
+          (gitMeta.userName && a.toLowerCase() === gitMeta.userName.toLowerCase()) ||
+          (options.actor && a.toLowerCase() === String(options.actor).toLowerCase()),
       );
       if (!matches) {
         console.error(
