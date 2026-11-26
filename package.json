@@ -1,10 +1,11 @@
 {
-  "name": "@muathrabuouda/ai-governance",
-  "version": "1.00.00",
+  "name": "ai-governance-engine",
+  "version": "1.0.0",
   "description": "AI-Native Software Engineering & Verification Platform for Autonomous Agents and Developers",
   "type": "module",
   "bin": {
-    "governance": "./bin/governance.mjs"
+    "governance": "bin/governance.mjs",
+    "ai-governance-engine": "bin/governance.mjs"
   },
   "files": [
     "bin",

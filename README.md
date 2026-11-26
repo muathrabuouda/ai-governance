@@ -8,7 +8,7 @@
 
 ## Overview
 
-**AI Governance** (codenamed **Governance** / `@muathrabuouda/ai-governance`) is an architectural verification engine and command-line harness designed to govern the end-to-end software engineering lifecycle when collaborating with autonomous AI agents.
+**AI Governance** (codenamed **Governance** / `ai-governance-engine`) is an architectural verification engine and command-line harness designed to govern the end-to-end software engineering lifecycle when collaborating with autonomous AI agents.
 
 In modern AI-assisted engineering, code generation is rapid, but verification and architectural trust are paramount. AI Governance ensures that every feature, boundary, contract, and decision is backed by verifiable proof:
 
@@ -20,32 +20,45 @@ In modern AI-assisted engineering, code generation is rapid, but verification an
 
 ---
 
-## Installation & Setup
+## Installation & Quick Start
+
+Run instantly anywhere via `npx` directly from GitHub without cloning or manual setup:
 
 ```bash
-# Clone repository
-git clone https://github.com/muathrabuouda/ai-governance.git
-cd ai-governance
+# Initialize Governance 3-pillar methodology in any project (Android, iOS, Web, Backend)
+npx github:muathrabuouda/ai-governance init "My Project"
 
-# Install dependencies (Zero runtime dependencies, dev-only toolchain)
-npm install
+# Check project governance status & ADRs
+npx github:muathrabuouda/ai-governance status
 
-# Run the comprehensive verification pipeline
-npm run check
-# or using the CLI:
-node ./bin/governance.mjs check
+# Record a new Architecture Decision Record (ADR)
+npx github:muathrabuouda/ai-governance new:adr "Adopt Clean Architecture"
+
+# Scaffold a new User Story with Acceptance Criteria
+npx github:muathrabuouda/ai-governance new:story 1 "User Authentication"
+
+# Generate agent instruction rules (.cursorrules, CLAUDE.md, Copilot)
+npx github:muathrabuouda/ai-governance rules
+
+# Install Git pre-commit enforcement hooks
+npx github:muathrabuouda/ai-governance install:hooks
+```
+
+Or install globally on your development machine:
+
+```bash
+npm install -g github:muathrabuouda/ai-governance
+governance --help
 ```
 
 ---
 
-## Governance CLI (`governance` / `governance`)
+## Governance CLI (`governance`)
 
 The CLI provides unified access to all software verification tools:
 
 ```bash
-node ./bin/governance.mjs <command> [options]
-# or
-node ./bin/governance.mjs <command> [options]
+governance <command> [options]
 ```
 
 ### Available Commands
