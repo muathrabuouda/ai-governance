@@ -64,21 +64,22 @@ governance --help
 
 ## Architecture & Trust Model
 
-### 1. State Guardian Cryptographic Hash Chain
+### 1. State Guardian Cryptographic Hash Chain & Git Attestation
 
 AI agents with workspace write access could theoretically modify acceptance criteria in `docs/foundation/02-spec.md` and simultaneously falsify verification state.
 
-AI Governance solves this via a **tamper-evident cryptographic hash chain** stored in `.governance/state.json`:
+AI Governance solves this via a **tamper-evident cryptographic hash chain with Git tree anchoring** stored in `.governance/state.json`:
 
 1. **Genesis Block:** Block 0 anchors the audit ledger with `previousHash: "0000000000000000000000000000000000000000000000000000000000000000"`.
-2. **Linked Chain:** Every subsequent approval or story deprecation links cryptographically to the preceding block hash:
-   $$\text{hash}_n = \text{SHA256}(n + \text{hash}_{n-1} + \text{timestamp} + \text{approver} + \text{action} + \text{data})$$
-3. **Chain Verification:** `governance check` verifies the full chain integrity from block 0 to the current head on every run. If any block, hash, or criteria text is modified out-of-band, verification immediately halts with an integrity error.
-4. **Story Deprecation:** Obsolete stories can be formally deprecated with audit accountability via:
+2. **Linked Chain & Attestation:** Every subsequent approval or story deprecation captures committer identity (`userName`, `userEmail`, `commitSha`, `treeHash`) and links cryptographically to the preceding block hash:
+   $$\text{hash}_n = \text{SHA256}(n + \text{hash}_{n-1} + \text{timestamp} + \text{author} + \text{action} + \text{details} + \text{attestation})$$
+3. **External Git Tree Anchor:** State Guardian anchors the latest block hash to the external git tree object (`headAnchor`), preventing agents from deleting `.governance/state.json` and rewriting audit logs from scratch.
+4. **Authorized Approvers Protection:** Supports `.governance/authorized-approvers.json` to cryptographically whitelist authorized signers and reject unverified agent approvals.
+5. **Story Lifecycle & Deprecation:** Obsolete stories can be formally deprecated with audit accountability and synchronized specification headers via:
    ```bash
-   governance deprecate:story <id> "Replaced by Story 5 in Sprint 3"
+   governance deprecate:story <id> "Replaced by Story 5 in Sprint 3" [--superseded-by=5]
    ```
-5. **Specification Pruning:** When specifications are refactored, pruning removed stories requires explicit human authorization:
+6. **Specification Pruning:** When specifications are refactored, pruning removed stories requires explicit human authorization:
    ```bash
    governance approve:spec "Muath R Abu Ouda" --prune
    ```
@@ -136,11 +137,11 @@ governance <command> [options]
 
 | Command | Description |
 | :--- | :--- |
-| `check` | Multi-stack verification pipeline enforcing all 9 policy gates. |
+| `check [--profile=...]` | Multi-stack verification pipeline enforcing all 9 policy gates (strict, standard, lenient). |
 | `status` | Summarizes project governance status, registered ADRs, and active story progression. |
 | `init [title] [--force]` | Initializes the full 3-pillar methodology documentation suite (safe by default). |
 | `approve:spec [name] [--prune]` | Formally approves and cryptographically locks Acceptance Criteria into `.governance/state.json`. |
-| `deprecate:story <id> [reason]` | Deprecates an approved story in the audit ledger with reason tracking. |
+| `deprecate:story <id> [reason] [--superseded-by=<new_id>]` | Deprecates an approved story in the audit ledger and spec with reason tracking. |
 | `new:adr <title>` | Records a new Architecture Decision Record in `docs/foundation/adr/`. |
 | `list:adr` | Lists all Architecture Decision Records and their statuses. |
 | `new:story <id> <title>` | Scaffolds a new user story with acceptance criteria (prevents duplicates). |
