@@ -145,35 +145,56 @@ export function buildTraceabilityMatrix(projectRoot = process.cwd()) {
     const criteriaTableText = blocks[storyNum] || "";
     const criteriaIds = parseStoryCriteriaIds(criteriaTableText);
 
-    // Verify which criteria IDs are referenced in test files
-    const testedCriteria = [];
+    // Verify which criteria IDs are referenced and semantically bound in test files
+    const referencedCriteria = [];
+    const boundCriteria = [];
+
     if (criteriaIds.length > 0 && tests.length > 0) {
       for (const cId of criteriaIds) {
-        const cIdRegex = new RegExp(`\\b${cId.replace(".", "\\.")}\\b`, "i");
-        const hasTestMatch = tests.some((testRelPath) => {
+        const escapedId = cId.replace(".", "\\.");
+        // General reference match
+        const mentionRegex = new RegExp(`\\b${escapedId}\\b`, "i");
+        // Semantic test binding: test/it/describe block title, or explicit tag [AC-X.Y] or @covers X.Y
+        const testBindingRegex = new RegExp(
+          `(?:test|it|describe|context|suite|def\\s+test_)\\s*\\([\\s\\S]*?['"\`][\\s\\S]*?\\b(?:AC-)?${escapedId}\\b`,
+          "i",
+        );
+        const tagRegex = new RegExp(`(?:\\[(?:AC-)?|@covers?\\s+|@criteria\\s+)${escapedId}\\b`, "i");
+
+        let hasMention = false;
+        let hasBinding = false;
+
+        for (const testRelPath of tests) {
           try {
             const content = readFileSync(resolve(projectRoot, testRelPath), "utf8");
-            return cIdRegex.test(content);
+            if (testBindingRegex.test(content) || tagRegex.test(content)) {
+              hasBinding = true;
+              hasMention = true;
+              break;
+            } else if (mentionRegex.test(content)) {
+              hasMention = true;
+            }
           } catch {
-            return false;
+            // Skip unreadable files
           }
-        });
-        if (hasTestMatch) {
-          testedCriteria.push(cId);
         }
+
+        if (hasMention) referencedCriteria.push(cId);
+        if (hasBinding) boundCriteria.push(cId);
       }
     }
 
     const criteriaCount = criteriaIds.length;
-    const coveragePercent = criteriaCount > 0 ? Math.round((testedCriteria.length / criteriaCount) * 100) : 0;
+    const refCoveragePercent = criteriaCount > 0 ? Math.round((referencedCriteria.length / criteriaCount) * 100) : 0;
+    const boundCoveragePercent = criteriaCount > 0 ? Math.round((boundCriteria.length / criteriaCount) * 100) : 0;
 
     if (isDeprecated) {
       status = "DEPRECATED";
     } else if (!hasSpec) {
       status = "ORPHANED_HASH";
     } else if (isApproved) {
-      if (criteriaCount > 0 && testedCriteria.length === criteriaCount && implementations.length > 0) {
-        status = "VERIFIED";
+      if (criteriaCount > 0 && referencedCriteria.length === criteriaCount && implementations.length > 0) {
+        status = boundCriteria.length === criteriaCount ? "VERIFIED" : "REFERENCED";
       } else if (tests.length > 0 && implementations.length > 0) {
         status = "PARTIALLY_VERIFIED";
       } else if (implementations.length > 0) {
@@ -182,6 +203,19 @@ export function buildTraceabilityMatrix(projectRoot = process.cwd()) {
         status = "APPROVED";
       }
     }
+
+    const traceabilityDetails = {
+      totalCriteria: criteriaCount,
+      referencedCriteria,
+      boundCriteria,
+      referenceCoveragePercent: refCoveragePercent,
+      boundCoveragePercent,
+      fullyBound: criteriaCount > 0 && boundCriteria.length === criteriaCount,
+      // Backward-compatible alias fields:
+      testedCriteria: referencedCriteria,
+      coveragePercent: refCoveragePercent,
+      fullyVerified: criteriaCount > 0 && referencedCriteria.length === criteriaCount,
+    };
 
     matrix[storyNum] = {
       storyNumber: storyNum,
@@ -196,12 +230,8 @@ export function buildTraceabilityMatrix(projectRoot = process.cwd()) {
       implementations,
       tests,
       criteriaHash: state.storyHashes[storyNum] || null,
-      semanticVerification: {
-        totalCriteria: criteriaCount,
-        testedCriteria,
-        coveragePercent,
-        fullyVerified: criteriaCount > 0 && testedCriteria.length === criteriaCount,
-      },
+      criteriaTraceability: traceabilityDetails,
+      semanticVerification: traceabilityDetails,
     };
   }
 
@@ -257,10 +287,16 @@ export function formatTraceabilityTerminal(matrix, filterStory) {
       lines.push(`  - Test Suites:    [WARN] None detected`);
     }
 
-    if (item.semanticVerification && item.semanticVerification.totalCriteria > 0) {
+    const trace = item.criteriaTraceability || item.semanticVerification;
+    if (trace && trace.totalCriteria > 0) {
       lines.push(
-        `  - Criteria Verification: ${item.semanticVerification.coveragePercent}% tested (${item.semanticVerification.testedCriteria.length}/${item.semanticVerification.totalCriteria})`,
+        `  - Criteria Reference Coverage: ${trace.referenceCoveragePercent ?? trace.coveragePercent}% (${trace.referencedCriteria?.length ?? trace.testedCriteria?.length}/${trace.totalCriteria})`,
       );
+      if (trace.boundCriteria) {
+        lines.push(
+          `  - Semantic Test Bindings:      ${trace.boundCoveragePercent}% (${trace.boundCriteria.length}/${trace.totalCriteria} criteria bound to test cases)`,
+        );
+      }
     }
 
     if (item.isDeprecated) {
