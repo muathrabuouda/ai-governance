@@ -1,0 +1,11 @@
+# ==============================================================================
+# CODEOWNERS for AI Governance Engine
+# Enforces mandatory human approval from the repository lead architect
+# on all root-of-trust files, governance state, policies, workflows, and standards.
+# ==============================================================================
+
+*                       @muathrabuouda
+.governance/            @muathrabuouda
+.github/workflows/      @muathrabuouda
+docs/foundation/        @muathrabuouda
+docs/standards/         @muathrabuouda

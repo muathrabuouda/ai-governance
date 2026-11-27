@@ -38,24 +38,43 @@ jobs:
         with:
           node-version: 22
 
-      - name: Import Authorized Governance GPG Public Keys
+      - name: Import Authorized Root-of-Trust Public Keys
         run: |
-          if [ -d ".governance/keys" ] && compgen -G ".governance/keys/*.asc" > /dev/null; then
-            echo "[STAGE] Importing authorized approver public keys from .governance/keys/..."
-            for keyfile in .governance/keys/*.asc; do
+          # ROOT-OF-TRUST SEPARATION:
+          # On pull_request events, never trust keys introduced in the PR branch itself!
+          # Instead, extract authorized public keys strictly from the target base branch.
+          KEY_SOURCE_DIR=".governance/keys"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="origin/${{ github.base_ref }}"
+            echo "[SECURITY] Pull Request detected. Sourcing root-of-trust keys strictly from $BASE_REF..."
+            TEMP_KEYS_DIR=$(mktemp -d)
+            # Extract keys from base branch object database
+            for key_path in $(git ls-tree --name-only "$BASE_REF" .governance/keys/ 2>/dev/null || true); do
+              if [[ "$key_path" == *.asc ]]; then
+                echo "[INFO] Extracting trusted root key $key_path from $BASE_REF"
+                git show "$BASE_REF:$key_path" > "$TEMP_KEYS_DIR/$(basename "$key_path")"
+              fi
+            done
+            KEY_SOURCE_DIR="$TEMP_KEYS_DIR"
+          fi
+
+          if [ -d "$KEY_SOURCE_DIR" ] && compgen -G "$KEY_SOURCE_DIR/*.asc" > /dev/null; then
+            echo "[STAGE] Importing authorized approver public keys from $KEY_SOURCE_DIR..."
+            for keyfile in "$KEY_SOURCE_DIR"/*.asc; do
               echo "[INFO] Importing $keyfile"
               gpg --batch --import "$keyfile"
             done
-            # Set ultimate ownertrust (level 6) for all imported keys to verify Git signatures cleanly (%G? = G)
+            # Set ultimate ownertrust (level 6) for verified base keys
             gpg --list-keys --fingerprint --with-colons | grep -E '^fpr:' | awk -F: '{print $10":6:"}' | gpg --import-ownertrust || true
-            echo "[PASS] Authorized GPG public keys imported and trusted."
+            echo "[PASS] Authorized base GPG public keys imported and trusted."
           else
-            echo "[WARN] No public keys found in .governance/keys/"
+            echo "[WARN] No public keys found in $KEY_SOURCE_DIR"
           fi
 
       - name: Verify Strict Signatures on Governance State or Criteria Changes
         run: |
-          # Detect whether the pushed commit or PR modified .governance/state.json or docs/foundation/02-spec.md
+          # Detect whether the pushed commit or PR modified any governance root-of-trust files
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             CHANGED_FILES=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" 2>/dev/null || git diff-tree --no-commit-id --name-only -r -m HEAD)
           elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
@@ -64,13 +83,26 @@ jobs:
             CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r -m HEAD)
           fi
 
-          GOV_CHANGES=$(echo "$CHANGED_FILES" | grep -E '^(\.governance/state\.json|docs/foundation/02-spec\.md)' || true)
+          # Comprehensive governance boundary trigger:
+          # Catches any changes to state, policies, authorized approvers, contracts, keys, specs, dependencies, or workflows
+          GOV_CHANGES=$(echo "$CHANGED_FILES" | grep -E '^(\.governance/|docs/foundation/02-spec\.md|docs/standards/dependencies\.md|\.github/workflows/)' || true)
 
           if [ -n "$GOV_CHANGES" ]; then
-            echo "[INFO] Governance state or specification files modified in this event:"
+            echo "[INFO] Governance boundary files modified in this event:"
             echo "$GOV_CHANGES"
+
+            # In PR events, prevent self-authorization: verify against base branch authorized-approvers
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "[SECURITY] Enforcing base branch root-of-trust approvers during PR audit..."
+              BASE_REF="origin/${{ github.base_ref }}"
+              if git rev-parse "$BASE_REF:.governance/authorized-approvers.json" >/dev/null 2>&1; then
+                # Ensure the whitelist used for validation is the authoritative base branch whitelist
+                git show "$BASE_REF:.governance/authorized-approvers.json" > .governance/authorized-approvers.json
+              fi
+            fi
+
             echo "[STAGE] Enforcing strict cryptographic signature verification on governance modification..."
             node bin/governance.mjs check --profile=strict
           else
-            echo "[PASS] No governance state or specification modifications detected in this event. Standard profile is sufficient."
+            echo "[PASS] No governance boundary modifications detected in this event. Standard profile is sufficient."
           fi
