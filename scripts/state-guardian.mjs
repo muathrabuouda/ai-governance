@@ -828,15 +828,22 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
   state.lastApprovedBy = resolvedAuthor;
   state.headAnchor = hashText(`${auditBlock.hash}:${attestation.commitSha}:${attestation.treeHash}`);
 
-  // External anchor: record in immutable Git Tag
+  // External anchor: record in immutable Git Tag (signed tag when GPG is configured)
   if (gitMeta.isGit && gitMeta.commitSha !== "0000000000000000000000000000000000000000") {
     try {
-      execSync(`git tag -a "${tagName}" -m "Governance Spec Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD -f`, {
+      execSync(`git tag -s "${tagName}" -m "Governance Spec Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`, {
         cwd: projectRoot,
         stdio: ["ignore", "ignore", "ignore"],
       });
     } catch {
-      // Non-fatal if git tag creation fails
+      try {
+        execSync(`git tag -a "${tagName}" -m "Governance Spec Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`, {
+          cwd: projectRoot,
+          stdio: ["ignore", "ignore", "ignore"],
+        });
+      } catch {
+        // Non-fatal if git tag creation fails
+      }
     }
   }
 
@@ -878,18 +885,131 @@ export function rebaselineSpec(
   const state = loadGovernanceState(projectRoot);
   const gitMeta = getGitAttestation(projectRoot);
 
+  let resolvedAuthor = author || "";
+  if (!resolvedAuthor && gitMeta.userName) {
+    resolvedAuthor = `${gitMeta.userName} <${gitMeta.userEmail}>`;
+  }
+
+  // 1. Sanitize approver name to reject shell metacharacters and control characters
+  if (typeof resolvedAuthor === "string" && /[;&|`$\n\r]/.test(resolvedAuthor)) {
+    console.error("[FAIL] Security Violation: Approver identifier contains illegal shell or control characters.");
+    return false;
+  }
+
+  // 2. Cryptographic Signature & Authorized Approvers Enforcement
+  const authFile = resolve(getGovernanceStateDir(projectRoot), "authorized-approvers.json");
+  let authData = null;
+  if (existsSync(authFile)) {
+    try {
+      authData = JSON.parse(readFileSync(authFile, "utf8"));
+    } catch {
+      // Non-fatal parse fallback
+    }
+  }
+
+  // Verify GitHub actor authorization if provided
+  if (options.actor && authData?.allowedGitHubActors && authData.allowedGitHubActors.length > 0) {
+    const isActorAllowed = authData.allowedGitHubActors.some(
+      (a) => a.toLowerCase() === String(options.actor).toLowerCase(),
+    );
+    if (!isActorAllowed) {
+      console.error(
+        `[FAIL] Security Violation: GitHub actor "${options.actor}" is not authorized. Not found in allowedGitHubActors in authorized-approvers.json.`,
+      );
+      return false;
+    }
+  }
+
+  // Resolve strict key enforcement using unified policy & approvers resolution
+  const strictKeyEnforcement = resolveStrictEnforcement(projectRoot, options);
+
+  // In strict mode, verify docs/foundation/02-spec.md has no uncommitted changes
+  if (strictKeyEnforcement && gitMeta.isGit) {
+    try {
+      const specDiff = execSync("git diff HEAD -- docs/foundation/02-spec.md", {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "ignore"],
+        encoding: "utf8",
+      }).trim();
+
+      if (specDiff.length > 0) {
+        console.error(
+          "[FAIL] Security Violation: Uncommitted changes detected in docs/foundation/02-spec.md. In strict mode, acceptance criteria must be committed in a signed commit before approval to prevent signature borrowing.",
+        );
+        return false;
+      }
+    } catch {
+      // Non-fatal if diff check fails
+    }
+  }
+
+  if (strictKeyEnforcement) {
+    if (!gitMeta.isGit) {
+      console.error("[FAIL] Security Violation: Strict migration baseline requires an active Git repository.");
+      return false;
+    }
+
+    if (gitMeta.signatureStatus !== "G") {
+      console.error(
+        `[FAIL] Security Violation: Commit is not signed with a verified cryptographic key (status: "${gitMeta.signatureStatus}"). Strict migration baseline requires a valid GPG or SSH commit signature (%G? = G).`,
+      );
+      return false;
+    }
+
+    const allowedKeys = Array.isArray(authData)
+      ? authData
+      : authData?.allowedKeyFingerprints || [];
+
+    if (allowedKeys.length === 0) {
+      console.error(
+        `[FAIL] Security Violation: In strict mode, "allowedKeyFingerprints" in authorized-approvers.json cannot be empty.`,
+      );
+      return false;
+    }
+
+    if (!gitMeta.signerKey && !gitMeta.signerKeyId && !gitMeta.signerFingerprint) {
+      console.error(
+        `[FAIL] Security Violation: Signer key fingerprint could not be extracted from commit signature.`,
+      );
+      return false;
+    }
+
+    if (!isKeyFingerprintAuthorized(gitMeta, allowedKeys)) {
+      console.error(
+        `[FAIL] Security Violation: Signing key "${gitMeta.signerFingerprint || gitMeta.signerKey}" (${gitMeta.signerName || "unnamed"}) is not authorized. Key fingerprint is not listed in allowedKeyFingerprints in authorized-approvers.json.`,
+      );
+      return false;
+    }
+  } else if (authData) {
+    const allowed = Array.isArray(authData) ? authData : authData.approvers || authData.allowedSigners || [];
+    if (allowed.length > 0) {
+      const matches = allowed.some(
+        (a) =>
+          isKeyFingerprintAuthorized(gitMeta, [a]) ||
+          a.toLowerCase() === resolvedAuthor.toLowerCase() ||
+          a.toLowerCase().startsWith(resolvedAuthor.toLowerCase() + " <") ||
+          (gitMeta.userEmail && a.toLowerCase() === gitMeta.userEmail.toLowerCase()) ||
+          (gitMeta.userName && a.toLowerCase() === gitMeta.userName.toLowerCase()) ||
+          (options.actor && a.toLowerCase() === String(options.actor).toLowerCase()),
+      );
+      if (!matches) {
+        console.error(
+          `[FAIL] Unauthorized approver "${resolvedAuthor}". Signer not listed in authorized-approvers.json.`,
+        );
+        return false;
+      }
+    }
+  }
+
+  // If the last block is an existing unverified RE_BASELINE block, pop it so we rebaseline cleanly
+  if (state.auditLog.length > 0 && state.auditLog[state.auditLog.length - 1].action === "RE_BASELINE") {
+    state.auditLog.pop();
+  }
+
   const previousHash =
     state.auditLog.length > 0
       ? state.auditLog[state.auditLog.length - 1].hash
       : GENESIS_PREVIOUS_HASH;
-
-  let resolvedAuthor = author || "Muath R Abu Ouda";
-  if (!author && gitMeta.userName) {
-    resolvedAuthor = gitMeta.userName;
-    if (gitMeta.userEmail) {
-      resolvedAuthor += ` <${gitMeta.userEmail}>`;
-    }
-  }
 
   // Update story hashes with current criteria
   state.storyHashes = {};
@@ -944,15 +1064,22 @@ export function rebaselineSpec(
   state.lastApprovedBy = resolvedAuthor;
   state.headAnchor = hashText(`${auditBlock.hash}:${attestation.commitSha}:${attestation.treeHash}`);
 
-  // Create tag anchor if in Git
+  // Create signed tag anchor if in Git
   if (gitMeta.isGit && gitMeta.commitSha !== "0000000000000000000000000000000000000000") {
     try {
-      execSync(`git tag -a "${tagName}" -m "Governance Migration Baseline Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD -f`, {
+      execSync(`git tag -s "${tagName}" -m "Governance Migration Baseline Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`, {
         cwd: projectRoot,
         stdio: ["ignore", "ignore", "ignore"],
       });
     } catch {
-      // Non-fatal if tag creation fails
+      try {
+        execSync(`git tag -a "${tagName}" -m "Governance Migration Baseline Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`, {
+          cwd: projectRoot,
+          stdio: ["ignore", "ignore", "ignore"],
+        });
+      } catch {
+        // Non-fatal if tag creation fails
+      }
     }
   }
 
