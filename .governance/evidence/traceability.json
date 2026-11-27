@@ -16,8 +16,39 @@
       "tests\\core\\governance-core.test.mjs"
     ],
     "criteriaHash": "c2eb4081da47d78b831ac07e9d83c541a415f2e1398ea7dfaf2741d5dc4f726e",
+    "criteriaTraceability": {
+      "totalCriteria": 3,
+      "referencedCriteria": [
+        "1.1",
+        "1.2"
+      ],
+      "boundCriteria": [
+        "1.1",
+        "1.2"
+      ],
+      "referenceCoveragePercent": 67,
+      "boundCoveragePercent": 67,
+      "fullyBound": false,
+      "testedCriteria": [
+        "1.1",
+        "1.2"
+      ],
+      "coveragePercent": 67,
+      "fullyVerified": false
+    },
     "semanticVerification": {
       "totalCriteria": 3,
+      "referencedCriteria": [
+        "1.1",
+        "1.2"
+      ],
+      "boundCriteria": [
+        "1.1",
+        "1.2"
+      ],
+      "referenceCoveragePercent": 67,
+      "boundCoveragePercent": 67,
+      "fullyBound": false,
       "testedCriteria": [
         "1.1",
         "1.2"
@@ -43,8 +74,34 @@
       "tests\\core\\governance-core.test.mjs"
     ],
     "criteriaHash": "e64612ade901b6a66bf3538b2c413f0a4bb6117b34c13bb4103688061ad74537",
+    "criteriaTraceability": {
+      "totalCriteria": 3,
+      "referencedCriteria": [
+        "2.1"
+      ],
+      "boundCriteria": [
+        "2.1"
+      ],
+      "referenceCoveragePercent": 33,
+      "boundCoveragePercent": 33,
+      "fullyBound": false,
+      "testedCriteria": [
+        "2.1"
+      ],
+      "coveragePercent": 33,
+      "fullyVerified": false
+    },
     "semanticVerification": {
       "totalCriteria": 3,
+      "referencedCriteria": [
+        "2.1"
+      ],
+      "boundCriteria": [
+        "2.1"
+      ],
+      "referenceCoveragePercent": 33,
+      "boundCoveragePercent": 33,
+      "fullyBound": false,
       "testedCriteria": [
         "2.1"
       ],
@@ -65,8 +122,24 @@
     "implementations": [],
     "tests": [],
     "criteriaHash": "f6a954ac4a52208eef48c96038b0cf53a2e441288ddaf1705dd5ae78890a6d9e",
+    "criteriaTraceability": {
+      "totalCriteria": 3,
+      "referencedCriteria": [],
+      "boundCriteria": [],
+      "referenceCoveragePercent": 0,
+      "boundCoveragePercent": 0,
+      "fullyBound": false,
+      "testedCriteria": [],
+      "coveragePercent": 0,
+      "fullyVerified": false
+    },
     "semanticVerification": {
       "totalCriteria": 3,
+      "referencedCriteria": [],
+      "boundCriteria": [],
+      "referenceCoveragePercent": 0,
+      "boundCoveragePercent": 0,
+      "fullyBound": false,
       "testedCriteria": [],
       "coveragePercent": 0,
       "fullyVerified": false
@@ -87,8 +160,24 @@
     ],
     "tests": [],
     "criteriaHash": "38a26f5b5e3eda97269dd6bb85ca3eda192d009cd5898287ac93061513d000c4",
+    "criteriaTraceability": {
+      "totalCriteria": 3,
+      "referencedCriteria": [],
+      "boundCriteria": [],
+      "referenceCoveragePercent": 0,
+      "boundCoveragePercent": 0,
+      "fullyBound": false,
+      "testedCriteria": [],
+      "coveragePercent": 0,
+      "fullyVerified": false
+    },
     "semanticVerification": {
       "totalCriteria": 3,
+      "referencedCriteria": [],
+      "boundCriteria": [],
+      "referenceCoveragePercent": 0,
+      "boundCoveragePercent": 0,
+      "fullyBound": false,
       "testedCriteria": [],
       "coveragePercent": 0,
       "fullyVerified": false

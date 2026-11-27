@@ -1,9 +1,9 @@
 {
   "version": "1.0.0",
   "verdict": "REQUIRES_REVIEW",
-  "summary": "1 gate(s) completed with warnings or require review: Static Analysis & Linting",
-  "timestamp": "2026-11-27T12:24:39.207Z",
-  "durationMs": 39667,
+  "summary": "2 gate(s) completed with warnings or require review: Code Formatting, Static Analysis & Linting",
+  "timestamp": "2026-11-27T13:00:48.198Z",
+  "durationMs": 41136,
   "environment": {
     "platform": "win32",
     "nodeVersion": "v24.18.0",
@@ -13,12 +13,12 @@
     "isGit": true,
     "userName": "Muath R Abu Ouda",
     "userEmail": "muathrabuouda@hotmail.com",
-    "commitSha": "26b1f401fea09bfd8e4f7b46b3b02b7ae63dc2f0",
-    "treeHash": "5ea15a6149de54d1ab14d95a5e17bba3c401a948",
+    "commitSha": "724bbe837b9c9fadbaff0260e37248ec6cad0be0",
+    "treeHash": "cc216bfb99c2df5368dbc0626257e290bb7be4c1",
     "signatureStatus": "N",
     "signerName": "",
     "signerKey": "",
-    "stateHeadAnchor": "a759a422394172864be688aee525547c3b6f02c35897503bb8061ecd4de741aa"
+    "stateHeadAnchor": "b82e8d3fcf434e1d0c75ccfab524972f426dbe4823e937a9751cd27b0d1772e5"
   },
   "policy": {
     "profile": "standard",
@@ -81,19 +81,19 @@
       "key": "formatting",
       "name": "Code Formatting",
       "required": false,
-      "status": "SKIPPED",
+      "status": "REQUIRES_REVIEW",
       "passed": true,
       "blocking": false,
-      "message": "[INFO] Code Formatting skipped: No project code formatter configured"
+      "message": "[WARN] Code Formatting check failed (optional gate, non-blocking): Code Formatting (Node.js / TypeScript) failed (exit code: 1)"
     },
     {
       "key": "static_analysis",
       "name": "Static Analysis & Linting",
       "required": false,
-      "status": "SKIPPED",
+      "status": "REQUIRES_REVIEW",
       "passed": true,
       "blocking": false,
-      "message": "[WARN] Static Analysis & Linting is not configured: No project linter configured"
+      "message": "[WARN] Static Analysis & Linting check failed (optional gate, non-blocking): Static Analysis (Node.js / TypeScript) failed (exit code: 1)"
     },
     {
       "key": "test_suite",
@@ -116,7 +116,25 @@
   ],
   "contentDigest": {
     "algorithm": "sha256",
-    "value": "0bf62b3dff3a3d43462a2523c3490c9c2e78a71f2c790dfe60cdd2558ebd4ffa"
+    "value": "c398ffa718e4ea5c23e69db52fa2e3d4f8330bae1c1950b8513a3cec67e10a3d"
+  },
+  "gitAttestation": {
+    "isGit": true,
+    "author": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
+    "commitSha": "724bbe837b9c9fadbaff0260e37248ec6cad0be0",
+    "treeHash": "cc216bfb99c2df5368dbc0626257e290bb7be4c1",
+    "commitSignatureStatus": "N",
+    "commitSignerName": null,
+    "commitSignerKey": null,
+    "commitSignerFingerprint": null,
+    "verified": false
+  },
+  "evidenceAttestation": {
+    "signed": false,
+    "type": "content_digest_only",
+    "signatureFile": null,
+    "verified": false,
+    "description": "Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest)"
   },
   "digitalProof": {
     "type": "none",
@@ -127,5 +145,5 @@
     "signerFingerprint": null,
     "verified": false
   },
-  "signature": "0bf62b3dff3a3d43462a2523c3490c9c2e78a71f2c790dfe60cdd2558ebd4ffa"
+  "signature": "c398ffa718e4ea5c23e69db52fa2e3d4f8330bae1c1950b8513a3cec67e10a3d"
 }
