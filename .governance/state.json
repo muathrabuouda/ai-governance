@@ -108,7 +108,7 @@
     },
     {
       "index": 4,
-      "timestamp": "2026-11-27T12:52:53.987Z",
+      "timestamp": "2026-11-27T17:46:32.938Z",
       "action": "RE_BASELINE",
       "author": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
       "previousHash": "3d921ed93bfdae22d87e74a7d59ad80dbeb701bdd5d598362b79403fa2a83f1f",
@@ -116,15 +116,15 @@
         "isGit": true,
         "userName": "Muath R Abu Ouda",
         "userEmail": "muathrabuouda@hotmail.com",
-        "commitSha": "724bbe837b9c9fadbaff0260e37248ec6cad0be0",
-        "treeHash": "cc216bfb99c2df5368dbc0626257e290bb7be4c1",
-        "signatureStatus": "N",
-        "signerName": "",
-        "signerKey": "",
+        "commitSha": "4034c7db12227f408b73c0e274313f91473af35a",
+        "treeHash": "d27c0d57cbca530efcfeb77139b168a2abbf2aea",
+        "signatureStatus": "G",
+        "signerName": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
+        "signerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
         "tagAnchor": {
           "tag": "governance/spec-v4",
-          "commitSha": "724bbe837b9c9fadbaff0260e37248ec6cad0be0",
-          "treeHash": "cc216bfb99c2df5368dbc0626257e290bb7be4c1"
+          "commitSha": "4034c7db12227f408b73c0e274313f91473af35a",
+          "treeHash": "d27c0d57cbca530efcfeb77139b168a2abbf2aea"
         }
       },
       "details": {
@@ -133,18 +133,18 @@
         "totalActiveStories": 4,
         "specHash": "e336a4d73b8d170425806794677965f09310a17086d20c14ff550c0beb40479f"
       },
-      "hash": "4c88de5774e1f6f46f118320edce18f819c3b8a36833b674056c01006d1cd5b1"
+      "hash": "15cf7d0921c748853cbf87486e1163e7b03561366e24d8d1fe8630b817842055"
     }
   ],
-  "lastVerifiedAt": "2026-11-27T12:52:54.459Z",
-  "lastApprovedAt": "2026-11-27T12:52:53.987Z",
+  "lastVerifiedAt": "2026-11-27T17:46:40.291Z",
+  "lastApprovedAt": "2026-11-27T17:46:32.938Z",
   "lastApprovedBy": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
-  "headAnchor": "b82e8d3fcf434e1d0c75ccfab524972f426dbe4823e937a9751cd27b0d1772e5",
+  "headAnchor": "7953e4f8d5c3c72a7e5805602eb80c9a391bfc218233541cc01239e8709d7026",
   "baseline": {
     "blockIndex": 4,
-    "blockHash": "4c88de5774e1f6f46f118320edce18f819c3b8a36833b674056c01006d1cd5b1",
-    "commitSha": "724bbe837b9c9fadbaff0260e37248ec6cad0be0",
+    "blockHash": "15cf7d0921c748853cbf87486e1163e7b03561366e24d8d1fe8630b817842055",
+    "commitSha": "4034c7db12227f408b73c0e274313f91473af35a",
     "reason": "Migration baseline: establishing cryptographic root of trust for legacy blocks",
-    "establishedAt": "2026-11-27T12:52:53.987Z"
+    "establishedAt": "2026-11-27T17:46:32.938Z"
   }
 }

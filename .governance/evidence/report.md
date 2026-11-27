@@ -2,26 +2,26 @@
 
 > **Verdict:** **[VERDICT: REQUIRES REVIEW]**  
 > **Summary:** 2 gate(s) completed with warnings or require review: Code Formatting, Static Analysis & Linting  
-> **Timestamp:** 2026-11-27T13:00:48.198Z (41136ms)  
-> **Content Digest (SHA-256):** `c398ffa718e4ea5c23e69db52fa2e3d4f8330bae1c1950b8513a3cec67e10a3d`  
+> **Timestamp:** 2026-11-27T17:48:02.229Z (48282ms)  
+> **Content Digest (SHA-256):** `419f8e44417c20a48bc0292f40c2df172a6181839a8eacb51ff7758fa46387eb`  
 > **Evidence Digital Attestation:** Unsigned (Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest))  
-> **Git Commit Attestation:** Unsigned
+> **Git Commit Attestation:** Valid (Signed by Muath R Abu Ouda <muathrabuouda@hotmail.com> [173E65E275BE3CD344241ECC0F2E74E6E851065E])
 
 ---
 
 ## Evidence Integrity & Attestation
 
 - **Content Digest Algorithm:** `sha256`
-- **Digest Value:** `c398ffa718e4ea5c23e69db52fa2e3d4f8330bae1c1950b8513a3cec67e10a3d`
+- **Digest Value:** `419f8e44417c20a48bc0292f40c2df172a6181839a8eacb51ff7758fa46387eb`
 - **Detached GPG Attestation:** Unsigned (Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest))
 - **Signature File:** `none (run 'governance evidence:sign')`
 
 ## Git Provenance & Commit Attestation
 
 - **Committer:** Muath R Abu Ouda <muathrabuouda@hotmail.com>
-- **Git Commit:** `724bbe837b` (Tree: `cc216bfb99`)
-- **Git Commit Signature:** Unsigned
-- **State Head Anchor:** `b82e8d3fcf434e1d...`
+- **Git Commit:** `4034c7db12` (Tree: `d27c0d57cb`)
+- **Git Commit Signature:** Valid (Signed by Muath R Abu Ouda <muathrabuouda@hotmail.com> [173E65E275BE3CD344241ECC0F2E74E6E851065E])
+- **State Head Anchor:** `7953e4f8d5c3c72a...`
 - **Policy Profile:** `standard` (Fail on warning: false)
 
 ## Detected Engineering Stacks

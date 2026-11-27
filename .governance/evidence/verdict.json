@@ -2,8 +2,8 @@
   "version": "1.0.0",
   "verdict": "REQUIRES_REVIEW",
   "summary": "2 gate(s) completed with warnings or require review: Code Formatting, Static Analysis & Linting",
-  "timestamp": "2026-11-27T13:00:48.198Z",
-  "durationMs": 41136,
+  "timestamp": "2026-11-27T17:48:02.229Z",
+  "durationMs": 48282,
   "environment": {
     "platform": "win32",
     "nodeVersion": "v24.18.0",
@@ -13,12 +13,12 @@
     "isGit": true,
     "userName": "Muath R Abu Ouda",
     "userEmail": "muathrabuouda@hotmail.com",
-    "commitSha": "724bbe837b9c9fadbaff0260e37248ec6cad0be0",
-    "treeHash": "cc216bfb99c2df5368dbc0626257e290bb7be4c1",
-    "signatureStatus": "N",
-    "signerName": "",
-    "signerKey": "",
-    "stateHeadAnchor": "b82e8d3fcf434e1d0c75ccfab524972f426dbe4823e937a9751cd27b0d1772e5"
+    "commitSha": "4034c7db12227f408b73c0e274313f91473af35a",
+    "treeHash": "d27c0d57cbca530efcfeb77139b168a2abbf2aea",
+    "signatureStatus": "G",
+    "signerName": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
+    "signerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
+    "stateHeadAnchor": "7953e4f8d5c3c72a7e5805602eb80c9a391bfc218233541cc01239e8709d7026"
   },
   "policy": {
     "profile": "standard",
@@ -116,18 +116,18 @@
   ],
   "contentDigest": {
     "algorithm": "sha256",
-    "value": "c398ffa718e4ea5c23e69db52fa2e3d4f8330bae1c1950b8513a3cec67e10a3d"
+    "value": "419f8e44417c20a48bc0292f40c2df172a6181839a8eacb51ff7758fa46387eb"
   },
   "gitAttestation": {
     "isGit": true,
     "author": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
-    "commitSha": "724bbe837b9c9fadbaff0260e37248ec6cad0be0",
-    "treeHash": "cc216bfb99c2df5368dbc0626257e290bb7be4c1",
-    "commitSignatureStatus": "N",
-    "commitSignerName": null,
-    "commitSignerKey": null,
-    "commitSignerFingerprint": null,
-    "verified": false
+    "commitSha": "4034c7db12227f408b73c0e274313f91473af35a",
+    "treeHash": "d27c0d57cbca530efcfeb77139b168a2abbf2aea",
+    "commitSignatureStatus": "G",
+    "commitSignerName": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
+    "commitSignerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
+    "commitSignerFingerprint": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
+    "verified": true
   },
   "evidenceAttestation": {
     "signed": false,
@@ -137,13 +137,13 @@
     "description": "Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest)"
   },
   "digitalProof": {
-    "type": "none",
-    "status": "N",
-    "signerName": null,
-    "signerKey": null,
-    "signerKeyId": null,
-    "signerFingerprint": null,
-    "verified": false
+    "type": "git-commit-gpg",
+    "status": "G",
+    "signerName": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
+    "signerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
+    "signerKeyId": "0F2E74E6E851065E",
+    "signerFingerprint": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
+    "verified": true
   },
-  "signature": "c398ffa718e4ea5c23e69db52fa2e3d4f8330bae1c1950b8513a3cec67e10a3d"
+  "signature": "419f8e44417c20a48bc0292f40c2df172a6181839a8eacb51ff7758fa46387eb"
 }
