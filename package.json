@@ -1,6 +1,6 @@
 {
   "name": "ai-governance-engine",
-  "version": "1.1.0",
+  "version": "1.01.00",
   "description": "AI-Native Software Engineering & Verification Platform for Autonomous Agents and Developers",
   "type": "module",
   "bin": {

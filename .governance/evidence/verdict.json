@@ -2,8 +2,8 @@
   "version": "1.0.0",
   "verdict": "REQUIRES_REVIEW",
   "summary": "1 gate(s) completed with warnings or require review: Static Analysis & Linting",
-  "timestamp": "2026-11-27T11:53:13.308Z",
-  "durationMs": 38790,
+  "timestamp": "2026-11-27T12:24:39.207Z",
+  "durationMs": 39667,
   "environment": {
     "platform": "win32",
     "nodeVersion": "v24.18.0",
@@ -13,8 +13,8 @@
     "isGit": true,
     "userName": "Muath R Abu Ouda",
     "userEmail": "muathrabuouda@hotmail.com",
-    "commitSha": "bba19b73caafaa49cdc9c14215866563a85a9e7c",
-    "treeHash": "f463b4d30b5afc50a98f943fa9ff78390abdfcd6",
+    "commitSha": "26b1f401fea09bfd8e4f7b46b3b02b7ae63dc2f0",
+    "treeHash": "5ea15a6149de54d1ab14d95a5e17bba3c401a948",
     "signatureStatus": "N",
     "signerName": "",
     "signerKey": "",
@@ -114,5 +114,18 @@
       "message": "[INFO] UI Design Tokens & System Compliance skipped: No frontend templates or UI stylesheets found (Not Applicable)"
     }
   ],
-  "signature": "50c0bf8ad873094c6533c4e04c95c15fbca5481bf1d7d14e23873bfd00fd6c28"
+  "contentDigest": {
+    "algorithm": "sha256",
+    "value": "0bf62b3dff3a3d43462a2523c3490c9c2e78a71f2c790dfe60cdd2558ebd4ffa"
+  },
+  "digitalProof": {
+    "type": "none",
+    "status": "N",
+    "signerName": null,
+    "signerKey": null,
+    "signerKeyId": null,
+    "signerFingerprint": null,
+    "verified": false
+  },
+  "signature": "0bf62b3dff3a3d43462a2523c3490c9c2e78a71f2c790dfe60cdd2558ebd4ffa"
 }
