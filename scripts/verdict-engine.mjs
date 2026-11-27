@@ -116,6 +116,11 @@ export function generateVerdict(
     })),
   };
 
+  // Check if a detached GPG signature already exists for the evidence artifact
+  const evidenceDir = getEvidenceDir(projectRoot);
+  const sigAscPath = resolve(evidenceDir, "verdict.json.asc");
+  const hasDetachedSignature = existsSync(sigAscPath);
+
   // Generate cryptographic content digest of verdict payload
   const digestValue = hashData(rawVerdict);
   const verdict = {
@@ -124,8 +129,29 @@ export function generateVerdict(
       algorithm: "sha256",
       value: digestValue,
     },
+    gitAttestation: {
+      isGit: gitMeta.isGit,
+      author: `${gitMeta.userName || "Unknown"} <${gitMeta.userEmail || "unknown"}>`,
+      commitSha: gitMeta.commitSha,
+      treeHash: gitMeta.treeHash,
+      commitSignatureStatus: gitMeta.signatureStatus || "N",
+      commitSignerName: gitMeta.signerName || null,
+      commitSignerKey: gitMeta.signerKey || null,
+      commitSignerFingerprint: gitMeta.signerFingerprint || null,
+      verified: gitMeta.signatureStatus === "G",
+    },
+    evidenceAttestation: {
+      signed: hasDetachedSignature,
+      type: hasDetachedSignature ? "detached-gpg" : "content_digest_only",
+      signatureFile: hasDetachedSignature ? "verdict.json.asc" : null,
+      verified: hasDetachedSignature,
+      description: hasDetachedSignature
+        ? "Cryptographically signed via detached GPG signature (verdict.json.asc)"
+        : "Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest)",
+    },
+    // Retained for backward-compatible consumption
     digitalProof: {
-      type: gitMeta.signatureStatus === "G" ? "git-gpg" : "none",
+      type: gitMeta.signatureStatus === "G" ? "git-commit-gpg" : "none",
       status: gitMeta.signatureStatus || "N",
       signerName: gitMeta.signerName || null,
       signerKey: gitMeta.signerKey || null,
@@ -133,10 +159,9 @@ export function generateVerdict(
       signerFingerprint: gitMeta.signerFingerprint || null,
       verified: gitMeta.signatureStatus === "G",
     },
-    signature: digestValue, // Retained for backward-compatible consumption
+    signature: digestValue,
   };
 
-  const evidenceDir = getEvidenceDir(projectRoot);
   const verdictPath = resolve(evidenceDir, "verdict.json");
   const reportPath = resolve(evidenceDir, "report.md");
 
@@ -197,13 +222,19 @@ export function generateReportMarkdown(verdict) {
 
   const stackList = verdict.stacks.map((s) => `- **${s.name}** (${s.type})`).join("\n");
 
-  const sigStatus = verdict.attestation.signatureStatus || "N";
-  const sigDescription =
+  const gitAttest = verdict.gitAttestation || verdict.attestation || {};
+  const sigStatus = gitAttest.commitSignatureStatus || gitAttest.signatureStatus || "N";
+  const gitSigDescription =
     sigStatus === "G"
-      ? `Valid (Signed by ${verdict.attestation.signerName || "Verified Key"} [${verdict.attestation.signerKey || "GPG/SSH"}])`
+      ? `Valid (Signed by ${gitAttest.commitSignerName || gitAttest.signerName || "Verified Key"} [${gitAttest.commitSignerKey || gitAttest.signerKey || "GPG/SSH"}])`
       : sigStatus === "N"
         ? "Unsigned"
         : `Status ${sigStatus}`;
+
+  const evidenceAttest = verdict.evidenceAttestation || {};
+  const evidenceSigDescription = evidenceAttest.signed
+    ? `Verified (${evidenceAttest.description})`
+    : `Unsigned (${evidenceAttest.description || "SHA-256 Digest Only"})`;
 
   return `# Governance Verification Report
 
@@ -211,16 +242,24 @@ export function generateReportMarkdown(verdict) {
 > **Summary:** ${verdict.summary}  
 > **Timestamp:** ${verdict.timestamp} (${verdict.durationMs}ms)  
 > **Content Digest (SHA-256):** \`${verdict.contentDigest?.value || verdict.signature}\`  
-> **Digital Issuer Proof:** ${sigDescription}
+> **Evidence Digital Attestation:** ${evidenceSigDescription}  
+> **Git Commit Attestation:** ${gitSigDescription}
 
 ---
 
-## Attestation & Provenance
+## Evidence Integrity & Attestation
 
-- **Committer:** ${verdict.attestation.userName} <${verdict.attestation.userEmail}>
-- **Git Commit:** \`${verdict.attestation.commitSha.slice(0, 10)}\` (Tree: \`${verdict.attestation.treeHash.slice(0, 10)}\`)
-- **Commit Signature:** ${sigDescription}
-- **State Head Anchor:** \`${verdict.attestation.stateHeadAnchor.slice(0, 16)}...\`
+- **Content Digest Algorithm:** \`${verdict.contentDigest?.algorithm || "sha256"}\`
+- **Digest Value:** \`${verdict.contentDigest?.value || verdict.signature}\`
+- **Detached GPG Attestation:** ${evidenceSigDescription}
+- **Signature File:** \`${evidenceAttest.signatureFile || "none (run 'governance evidence:sign')"}\`
+
+## Git Provenance & Commit Attestation
+
+- **Committer:** ${gitAttest.author || `${gitAttest.userName || "Unknown"} <${gitAttest.userEmail || "unknown"}>`}
+- **Git Commit:** \`${(gitAttest.commitSha || "0000000000").slice(0, 10)}\` (Tree: \`${(gitAttest.treeHash || "0000000000").slice(0, 10)}\`)
+- **Git Commit Signature:** ${gitSigDescription}
+- **State Head Anchor:** \`${(verdict.attestation?.stateHeadAnchor || "unanchored").slice(0, 16)}...\`
 - **Policy Profile:** \`${verdict.policy.profile}\` (Fail on warning: ${verdict.policy.failOnWarning})
 
 ## Detected Engineering Stacks
