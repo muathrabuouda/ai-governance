@@ -43,6 +43,7 @@ import { detectStacks, isExecutableAvailable, runStage } from "../../scripts/sta
 import { generateVerdict, getGateBadge, loadLatestVerdict } from "../../scripts/verdict-engine.mjs";
 import { buildTraceabilityMatrix } from "../../scripts/traceability.mjs";
 import {
+  canAgentExecuteAction,
   initAgentContract,
   isPathProtected,
   loadAgentContract,
@@ -123,6 +124,64 @@ describe("Governance Core Integration Tests", () => {
       const invalid = validatePolicy({ gates: { bad_gate: { required: "yes" } } });
       assert.equal(invalid.valid, false);
       assert.ok(invalid.errors.length > 0);
+    });
+
+    test("fails closed when policy.json contains invalid or corrupted JSON", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-policy-corrupt-"));
+      try {
+        const govDir = join(tempDir, ".governance");
+        mkdirSync(govDir, { recursive: true });
+        writeFileSync(join(govDir, "policy.json"), "{ invalid: json, corrupted content", "utf8");
+
+        assert.throws(
+          () => loadPolicy(tempDir),
+          /Failed to parse \.governance\/policy\.json.*Fail-Closed/i,
+          "loadPolicy must fail closed when policy file contains malformed JSON",
+        );
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("fails closed when requested policy profile is unknown", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-policy-unknown-"));
+      try {
+        assert.throws(
+          () => loadPolicy(tempDir, "non_existent_profile"),
+          /Unknown policy profile "non_existent_profile".*Fail-Closed/i,
+          "loadPolicy must fail closed when an unrecognized profile is requested",
+        );
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("fails closed when policy configuration violates schema validation", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-policy-schema-"));
+      try {
+        const govDir = join(tempDir, ".governance");
+        mkdirSync(govDir, { recursive: true });
+        writeFileSync(
+          join(govDir, "policy.json"),
+          JSON.stringify({
+            version: "1.0.0",
+            gates: {
+              invalid_gate: {
+                required: "not_a_boolean",
+              },
+            },
+          }),
+          "utf8",
+        );
+
+        assert.throws(
+          () => loadPolicy(tempDir),
+          /Policy validation failed/i,
+          "loadPolicy must fail closed when schema validation encounters invalid gate types",
+        );
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
     });
   });
 
@@ -837,6 +896,71 @@ Some descriptive text without any table.
         rmSync(tempDir, { recursive: true, force: true });
       }
     });
+
+    test("separates content digest from digital issuer proof in verdict payload", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-verdict-proof-"));
+      try {
+        const dummyGateResults = [
+          { key: "spec_integrity", name: "Spec Lock", required: true, passed: true, status: GateStatus.PASSED },
+        ];
+        const policy = { profile: "standard", fail_on_warning: false };
+        const verdict = generateVerdict(
+          { gateResults: dummyGateResults, policy, stacks: [], startTime: Date.now() },
+          tempDir,
+        );
+
+        // 1. Must define contentDigest object with sha256 algorithm and hash
+        assert.ok(verdict.contentDigest);
+        assert.equal(verdict.contentDigest.algorithm, "sha256");
+        assert.match(verdict.contentDigest.value, /^[a-f0-9]{64}$/);
+
+        // 2. Must define digitalProof object separating identity from hash
+        assert.ok(verdict.digitalProof);
+        assert.ok("type" in verdict.digitalProof);
+        assert.ok("verified" in verdict.digitalProof);
+
+        // 3. Backward-compatible signature alias preserved
+        assert.equal(verdict.signature, verdict.contentDigest.value);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("performs semantic criteria verification in traceability matrix", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-semantic-test-"));
+      try {
+        const docsDir = join(tempDir, "docs", "foundation");
+        const testsDir = join(tempDir, "tests");
+        mkdirSync(docsDir, { recursive: true });
+        mkdirSync(testsDir, { recursive: true });
+
+        // Specification with Story 1 having criteria 1.1 and 1.2
+        const specContent = `# Specification
+### Story 1: Authentication Core
+| ID  | Given | When | Then |
+| :-- | :--- | :--- | :--- |
+| 1.1 | Valid token | Login called | Session created |
+| 1.2 | Invalid token | Login called | Error returned |
+`;
+        writeFileSync(join(docsDir, "02-spec.md"), specContent, "utf8");
+
+        // Test file referencing criteria 1.1 and 1.2
+        const testContent = `// Story 1: tests
+// Verifies criteria 1.1 and 1.2
+test("verifies criteria 1.1 and 1.2", () => {});
+`;
+        writeFileSync(join(testsDir, "story1.test.ts"), testContent, "utf8");
+
+        const matrix = buildTraceabilityMatrix(tempDir);
+        assert.ok(matrix["1"]);
+        assert.ok(matrix["1"].semanticVerification);
+        assert.equal(matrix["1"].semanticVerification.totalCriteria, 2);
+        assert.equal(matrix["1"].semanticVerification.coveragePercent, 100);
+        assert.equal(matrix["1"].semanticVerification.fullyVerified, true);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("Agent Control & Governance Contract", () => {
@@ -860,6 +984,40 @@ Some descriptive text without any table.
         assert.equal(contract.strictMode, true);
         assert.ok(contract.protectedPaths.includes(".governance/state.json"));
         assert.equal(contract.forbiddenActions.deleteTestFiles, true);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("enforces pre-execution permissions via canAgentExecuteAction", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-perm-test-"));
+      try {
+        const context = { projectRoot: tempDir };
+
+        // 1. Modifying protected path must be blocked
+        const checkProtected = canAgentExecuteAction("write", ".governance/state.json", context);
+        assert.equal(checkProtected.allowed, false);
+        assert.match(checkProtected.reason, /protected/i);
+
+        // 2. Deleting test files must be blocked
+        const checkDeleteTest = canAgentExecuteAction("delete", "tests/feature.test.ts", context);
+        assert.equal(checkDeleteTest.allowed, false);
+        assert.match(checkDeleteTest.reason, /prohibited/i);
+
+        // 3. Modifying ADR must be blocked
+        const checkModifyAdr = canAgentExecuteAction("modify", "docs/foundation/adr/001-test.md", context);
+        assert.equal(checkModifyAdr.allowed, false);
+        assert.match(checkModifyAdr.reason, /protected|Architecture Decision Record/i);
+
+        // 4. Adding unapproved dependency must be blocked
+        const checkUnapprovedDep = canAgentExecuteAction("add_dependency", "malicious-package", context);
+        assert.equal(checkUnapprovedDep.allowed, false);
+        assert.match(checkUnapprovedDep.reason, /not approved/i);
+
+        // 5. Allowed action on normal source code must pass
+        const checkNormalWrite = canAgentExecuteAction("write", "src/features/billing.ts", context);
+        assert.equal(checkNormalWrite.allowed, true);
+        assert.equal(checkNormalWrite.reason, null);
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
