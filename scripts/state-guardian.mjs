@@ -18,7 +18,8 @@ import { resolve } from "node:path";
  * @returns {string}
  */
 export function getGovernanceStateDir(projectRoot = process.cwd()) {
-  const stateDir = resolve(projectRoot, ".governance");
+  const root = projectRoot || process.cwd();
+  const stateDir = resolve(root, ".governance");
   if (!existsSync(stateDir)) {
     mkdirSync(stateDir, { recursive: true });
   }
@@ -231,7 +232,9 @@ export function normalizeKey(key) {
  * @returns {boolean}
  */
 export function isKeyFingerprintAuthorized(gitMeta, allowedKeys = []) {
-  if (!allowedKeys || allowedKeys.length === 0) return true;
+  if (!allowedKeys || !Array.isArray(allowedKeys) || allowedKeys.length === 0) {
+    return false;
+  }
 
   const candidateKeys = [
     normalizeKey(gitMeta.signerFingerprint),
@@ -331,9 +334,6 @@ export function resolveStrictEnforcement(projectRoot = process.cwd(), options = 
       if (auth.strictKeyEnforcement) {
         return true;
       }
-      if (Array.isArray(auth.allowedKeyFingerprints) && auth.allowedKeyFingerprints.length > 0) {
-        return true;
-      }
     } catch {
       // Non-fatal parse fallback
     }
@@ -377,6 +377,34 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
         }
       } catch {
         // Non-fatal if diff check fails
+      }
+    }
+  }
+
+  // In strict mode, verify that authorized approvers configuration exists and has at least one registered key
+  let strictAllowedKeys = [];
+  if (isStrict && projectRoot) {
+    const authFile = resolve(getGovernanceStateDir(projectRoot), "authorized-approvers.json");
+    if (!existsSync(authFile)) {
+      violations.push(
+        `Security Violation: In strict mode, authorized-approvers.json must exist with registered "allowedKeyFingerprints".`,
+      );
+    } else {
+      try {
+        const authData = JSON.parse(readFileSync(authFile, "utf8"));
+        strictAllowedKeys = Array.isArray(authData)
+          ? authData
+          : authData?.allowedKeyFingerprints || [];
+
+        if (strictAllowedKeys.length === 0) {
+          violations.push(
+            `Security Violation: In strict mode, "allowedKeyFingerprints" in authorized-approvers.json cannot be empty. An authorized approver key fingerprint must be registered to verify state modifications.`,
+          );
+        }
+      } catch {
+        violations.push(
+          `Security Violation: Failed to parse authorized-approvers.json during strict key verification.`,
+        );
       }
     }
   }
@@ -490,24 +518,10 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
               violations.push(
                 `The commit modifying .governance/state.json lacks a verified cryptographic signature (status: "${stateSigStatus}"). Strict policy requires verified GPG/SSH commit signatures on state changes.`,
               );
-            } else {
-              const authFile = resolve(getGovernanceStateDir(projectRoot), "authorized-approvers.json");
-              if (existsSync(authFile)) {
-                try {
-                  const authData = JSON.parse(readFileSync(authFile, "utf8"));
-                  const allowedKeys = Array.isArray(authData)
-                    ? authData
-                    : authData?.allowedKeyFingerprints || [];
-
-                  if (allowedKeys.length > 0 && !isKeyFingerprintAuthorized(stateMeta, allowedKeys)) {
-                    violations.push(
-                      `The commit modifying .governance/state.json was signed by an unauthorized key (${stateMeta.signerFingerprint || stateMeta.signerKey}).`,
-                    );
-                  }
-                } catch {
-                  // Fallback
-                }
-              }
+            } else if (strictAllowedKeys.length > 0 && !isKeyFingerprintAuthorized(stateMeta, strictAllowedKeys)) {
+              violations.push(
+                `The commit modifying .governance/state.json was signed by an unauthorized key (${stateMeta.signerFingerprint || stateMeta.signerKey || "unknown"}). Key fingerprint is not listed in allowedKeyFingerprints in authorized-approvers.json.`,
+              );
             }
           }
         } catch {
@@ -712,20 +726,25 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
       ? authData
       : authData?.allowedKeyFingerprints || [];
 
-    if (allowedKeys.length > 0) {
-      if (!gitMeta.signerKey && !gitMeta.signerKeyId && !gitMeta.signerFingerprint) {
-        console.error(
-          `[FAIL] Security Violation: Signer key fingerprint could not be extracted from commit signature.`,
-        );
-        return false;
-      }
+    if (allowedKeys.length === 0) {
+      console.error(
+        `[FAIL] Security Violation: In strict mode, "allowedKeyFingerprints" in authorized-approvers.json cannot be empty.`,
+      );
+      return false;
+    }
 
-      if (!isKeyFingerprintAuthorized(gitMeta, allowedKeys)) {
-        console.error(
-          `[FAIL] Security Violation: Signing key "${gitMeta.signerFingerprint || gitMeta.signerKey}" (${gitMeta.signerName || "unnamed"}) is not authorized. Key fingerprint is not listed in allowedKeyFingerprints in authorized-approvers.json.`,
-        );
-        return false;
-      }
+    if (!gitMeta.signerKey && !gitMeta.signerKeyId && !gitMeta.signerFingerprint) {
+      console.error(
+        `[FAIL] Security Violation: Signer key fingerprint could not be extracted from commit signature.`,
+      );
+      return false;
+    }
+
+    if (!isKeyFingerprintAuthorized(gitMeta, allowedKeys)) {
+      console.error(
+        `[FAIL] Security Violation: Signing key "${gitMeta.signerFingerprint || gitMeta.signerKey}" (${gitMeta.signerName || "unnamed"}) is not authorized. Key fingerprint is not listed in allowedKeyFingerprints in authorized-approvers.json.`,
+      );
+      return false;
     }
   } else if (authData) {
     // Non-strict fallback: if authorized approvers list is defined
