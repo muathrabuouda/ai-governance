@@ -194,7 +194,9 @@ export function loadPolicy(projectRoot = process.cwd(), profileOverride) {
     try {
       custom = JSON.parse(readFileSync(policyFile, "utf8"));
     } catch (err) {
-      console.warn(`[WARN] Failed to parse .governance/policy.json: ${err.message}. Using default policy.`);
+      throw new Error(
+        `Failed to parse .governance/policy.json: ${err.message}. Policy file is corrupted or contains invalid JSON (Fail-Closed).`,
+      );
     }
   }
 
@@ -204,14 +206,29 @@ export function loadPolicy(projectRoot = process.cwd(), profileOverride) {
   // Find profile definition (built-in or custom user-defined in policy.profiles)
   const profileDef =
     BUILTIN_PROFILES[requestedProfile] ||
-    (custom.profiles && custom.profiles[requestedProfile]) ||
-    BUILTIN_PROFILES.standard;
+    (custom.profiles && custom.profiles[requestedProfile]);
+
+  if (!profileDef) {
+    const available = [
+      ...Object.keys(BUILTIN_PROFILES),
+      ...(custom.profiles ? Object.keys(custom.profiles) : []),
+    ];
+    throw new Error(
+      `Unknown policy profile "${requestedProfile}". Available profiles: ${available.join(", ")} (Fail-Closed).`,
+    );
+  }
 
   // Assemble gate configurations: Base -> Custom/Profile Overrides
   // If profile is explicitly specified via CLI, its overrides take precedence over project custom defaults.
   const isCliOverride = Boolean(profileOverride);
+  const allGateKeys = new Set([
+    ...Object.keys(DEFAULT_POLICY.gates),
+    ...(custom.gates ? Object.keys(custom.gates) : []),
+    ...(profileDef.gate_overrides ? Object.keys(profileDef.gate_overrides) : []),
+  ]);
   const resolvedGates = {};
-  for (const [key, baseConfig] of Object.entries(DEFAULT_POLICY.gates)) {
+  for (const key of allGateKeys) {
+    const baseConfig = DEFAULT_POLICY.gates[key] || {};
     const profileOverrideConfig = (profileDef.gate_overrides && profileDef.gate_overrides[key]) || {};
     const customConfig = (custom.gates && custom.gates[key]) || {};
 
@@ -241,10 +258,9 @@ export function loadPolicy(projectRoot = process.cwd(), profileOverride) {
 
   const validation = validatePolicy(resolvedPolicy);
   if (!validation.valid) {
-    console.warn(`[WARN] Policy validation warnings in .governance/policy.json:`);
-    for (const err of validation.errors) {
-      console.warn(`       - ${err}`);
-    }
+    throw new Error(
+      `Policy validation failed in .governance/policy.json:\n${validation.errors.map((err) => "       - " + err).join("\n")} (Fail-Closed).`,
+    );
   }
 
   return resolvedPolicy;
