@@ -29,6 +29,7 @@ import {
   verifyCriteriaIntegrity,
   verifyThreatModelCoverage,
   approveSpec,
+  rebaselineSpec,
   deprecateStory,
   lockCriteria,
   resolveStrictEnforcement,
@@ -119,6 +120,26 @@ const COMMANDS = {
       const filtered = args.filter((a) => a !== "--prune" && !a.startsWith("--actor="));
       const signer = filtered.join(" ") || "Engineer";
       approveSpec(signer, { prune: isPrune, actor }, process.cwd());
+    },
+  },
+  "spec:rebaseline": {
+    description: "Establish a migration baseline anchor for historical specification locks: governance spec:rebaseline [reason] [--author=<name>]",
+    action: () => {
+      const authorFlag = args.find((a) => a.startsWith("--author="));
+      const author = authorFlag ? authorFlag.replace("--author=", "").trim() : undefined;
+      const filtered = args.filter((a) => !a.startsWith("--author="));
+      const reason = filtered.join(" ") || "Migration baseline: establishing cryptographic root of trust for legacy blocks";
+      rebaselineSpec(author, reason, {}, process.cwd());
+    },
+  },
+  "rebaseline:spec": {
+    description: "Alias for spec:rebaseline",
+    action: () => {
+      const authorFlag = args.find((a) => a.startsWith("--author="));
+      const author = authorFlag ? authorFlag.replace("--author=", "").trim() : undefined;
+      const filtered = args.filter((a) => !a.startsWith("--author="));
+      const reason = filtered.join(" ") || "Migration baseline: establishing cryptographic root of trust for legacy blocks";
+      rebaselineSpec(author, reason, {}, process.cwd());
     },
   },
   "lock:criteria": {

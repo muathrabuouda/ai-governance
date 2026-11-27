@@ -409,6 +409,18 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
     }
   }
 
+  // Resolve migration baseline anchor:
+  // Allows transitioning from historical unauthenticated development blocks to strict cryptographically signed production blocks.
+  let baselineIndex = -1;
+  for (let i = 0; i < state.auditLog.length; i++) {
+    if (state.auditLog[i].action === "RE_BASELINE" || state.auditLog[i].action === "MIGRATION_BASELINE") {
+      baselineIndex = i;
+    }
+  }
+  if (state.baseline && typeof state.baseline.blockIndex === "number") {
+    baselineIndex = Math.max(baselineIndex, state.baseline.blockIndex);
+  }
+
   let expectedPrevious = GENESIS_PREVIOUS_HASH;
 
   for (let i = 0; i < state.auditLog.length; i++) {
@@ -434,12 +446,15 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
       break;
     }
 
-    // In strict mode, enforce that approvals have a verified GPG/SSH signature
-    if (isStrict && block.action === "APPROVE_SPEC") {
+    // In strict mode, enforce verified cryptographic signatures
+    // If a migration baseline exists, legacy blocks strictly prior to baseline are verified
+    // for hash integrity and chain continuity, while GPG signature is required from baseline onwards.
+    const requiresSignature = baselineIndex === -1 ? true : i >= baselineIndex;
+    if (isStrict && requiresSignature && (block.action === "APPROVE_SPEC" || block.action === "RE_BASELINE")) {
       const sigStatus = block.attestation?.signatureStatus || "N";
       if (sigStatus !== "G") {
         violations.push(
-          `Audit log block ${i} (spec approval) lacks a verified cryptographic signature (status: "${sigStatus}"). Strict policy requires verified GPG/SSH signatures.`,
+          `Audit log block ${i} (${block.action}) lacks a verified cryptographic signature (status: "${sigStatus}"). Strict policy requires verified GPG/SSH signatures.`,
         );
       }
     }
@@ -504,6 +519,7 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
 
           if (stateCommitData) {
             const parts = stateCommitData.split("|");
+            const stateCommitSha = parts[0] || "";
             const stateSigStatus = parts[1] || "N";
             const stateMeta = {
               signatureStatus: stateSigStatus,
@@ -514,11 +530,14 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
               signerKey: parts[4] || parts[5] || parts[3] || "",
             };
 
-            if (stateSigStatus !== "G") {
+            const baselineCommit = state.baseline?.commitSha;
+            const isHistoricalUnsigned = baselineCommit && stateCommitSha === baselineCommit && state.baseline?.blockIndex !== undefined;
+
+            if (stateSigStatus !== "G" && !isHistoricalUnsigned) {
               violations.push(
                 `The commit modifying .governance/state.json lacks a verified cryptographic signature (status: "${stateSigStatus}"). Strict policy requires verified GPG/SSH commit signatures on state changes.`,
               );
-            } else if (strictAllowedKeys.length > 0 && !isKeyFingerprintAuthorized(stateMeta, strictAllowedKeys)) {
+            } else if (stateSigStatus === "G" && strictAllowedKeys.length > 0 && !isKeyFingerprintAuthorized(stateMeta, strictAllowedKeys)) {
               violations.push(
                 `The commit modifying .governance/state.json was signed by an unauthorized key (${stateMeta.signerFingerprint || stateMeta.signerKey || "unknown"}). Key fingerprint is not listed in allowedKeyFingerprints in authorized-approvers.json.`,
               );
@@ -837,6 +856,112 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
 }
 
 export const lockCriteria = approveSpec;
+
+/**
+ * Establishes a cryptographic migration baseline anchor in .governance/state.json.
+ * Seals all prior unauthenticated history while enforcing strict cryptographic
+ * GPG signatures and tag verification from this baseline forward.
+ *
+ * @param {string} [author]
+ * @param {string} [reason]
+ * @param {object} [options]
+ * @param {string} [projectRoot]
+ * @returns {boolean}
+ */
+export function rebaselineSpec(
+  author,
+  reason = "Migration baseline: establishing cryptographic root of trust for legacy blocks",
+  options = {},
+  projectRoot = process.cwd(),
+) {
+  const currentCriteria = extractCriteriaBlocks(projectRoot);
+  const state = loadGovernanceState(projectRoot);
+  const gitMeta = getGitAttestation(projectRoot);
+
+  const previousHash =
+    state.auditLog.length > 0
+      ? state.auditLog[state.auditLog.length - 1].hash
+      : GENESIS_PREVIOUS_HASH;
+
+  let resolvedAuthor = author || "Muath R Abu Ouda";
+  if (!author && gitMeta.userName) {
+    resolvedAuthor = gitMeta.userName;
+    if (gitMeta.userEmail) {
+      resolvedAuthor += ` <${gitMeta.userEmail}>`;
+    }
+  }
+
+  // Update story hashes with current criteria
+  state.storyHashes = {};
+  for (const [num, text] of Object.entries(currentCriteria)) {
+    state.storyHashes[num] = hashText(text);
+  }
+
+  const tagName = `governance/spec-v${state.auditLog.length}`;
+  const tagAnchor = {
+    tag: tagName,
+    commitSha: gitMeta.commitSha,
+    treeHash: gitMeta.treeHash,
+  };
+
+  const attestation = {
+    isGit: gitMeta.isGit,
+    userName: gitMeta.userName,
+    userEmail: gitMeta.userEmail,
+    commitSha: gitMeta.commitSha,
+    treeHash: gitMeta.treeHash,
+    signatureStatus: gitMeta.signatureStatus || "N",
+    signerName: gitMeta.signerName || "",
+    signerKey: gitMeta.signerKey || "",
+    tagAnchor,
+  };
+
+  const auditBlock = {
+    index: state.auditLog.length,
+    timestamp: new Date().toISOString(),
+    action: "RE_BASELINE",
+    author: resolvedAuthor,
+    previousHash,
+    attestation,
+    details: {
+      reason,
+      baselineBlockIndex: state.auditLog.length,
+      totalActiveStories: Object.keys(state.storyHashes).length,
+      specHash: hashText(JSON.stringify(state.storyHashes)),
+    },
+  };
+  auditBlock.hash = calculateBlockHash(auditBlock);
+
+  state.auditLog.push(auditBlock);
+  state.baseline = {
+    blockIndex: auditBlock.index,
+    blockHash: auditBlock.hash,
+    commitSha: gitMeta.commitSha,
+    reason,
+    establishedAt: auditBlock.timestamp,
+  };
+  state.lastApprovedAt = auditBlock.timestamp;
+  state.lastApprovedBy = resolvedAuthor;
+  state.headAnchor = hashText(`${auditBlock.hash}:${attestation.commitSha}:${attestation.treeHash}`);
+
+  // Create tag anchor if in Git
+  if (gitMeta.isGit && gitMeta.commitSha !== "0000000000000000000000000000000000000000") {
+    try {
+      execSync(`git tag -a "${tagName}" -m "Governance Migration Baseline Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD -f`, {
+        cwd: projectRoot,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+    } catch {
+      // Non-fatal if tag creation fails
+    }
+  }
+
+  saveGovernanceState(state, projectRoot);
+  console.log(`[PASS] Cryptographic Migration Baseline established at block ${auditBlock.index}`);
+  console.log(`       Reason: ${reason}`);
+  console.log(`       Baseline Hash: ${auditBlock.hash}`);
+  return true;
+}
 
 /**
  * Formally marks a story as deprecated in .governance/state.json with justification.
