@@ -23,6 +23,8 @@ export const DEFAULT_AGENT_CONTRACT = {
     ".governance/policy.json",
     ".governance/authorized-approvers.json",
     ".governance/agent-contract.json",
+    ".governance/keys/",
+    "docs/standards/dependencies.md",
     "docs/foundation/adr/",
     "docs/foundation/01-ambiguity.md",
     "LICENSE",
@@ -44,31 +46,59 @@ export const DEFAULT_AGENT_CONTRACT = {
 
 /**
  * Loads project agent contract from .governance/agent-contract.json or returns default.
+ * Enforces Fail-Closed behavior: throws immediately on corrupt JSON or schema violations.
+ *
  * @param {string} [projectRoot]
  * @returns {typeof DEFAULT_AGENT_CONTRACT}
  */
 export function loadAgentContract(projectRoot = process.cwd()) {
   const contractPath = resolve(getGovernanceStateDir(projectRoot), "agent-contract.json");
   if (existsSync(contractPath)) {
+    let rawContent = "";
     try {
-      const custom = JSON.parse(readFileSync(contractPath, "utf8"));
-      return {
-        ...DEFAULT_AGENT_CONTRACT,
-        ...custom,
-        protectedPaths: [
-          ...new Set([
-            ...DEFAULT_AGENT_CONTRACT.protectedPaths,
-            ...(custom.protectedPaths || []),
-          ]),
-        ],
-        forbiddenActions: {
-          ...DEFAULT_AGENT_CONTRACT.forbiddenActions,
-          ...(custom.forbiddenActions || {}),
-        },
-      };
-    } catch {
-      // Fallback on parse failure
+      rawContent = readFileSync(contractPath, "utf8");
+    } catch (err) {
+      throw new Error(`[Fail-Closed] Unable to read Agent Contract at ${contractPath}: ${err.message}`);
     }
+
+    let custom;
+    try {
+      custom = JSON.parse(rawContent);
+    } catch (err) {
+      throw new Error(
+        `[Fail-Closed] Agent Contract at ${contractPath} is corrupted or invalid JSON: ${err.message}. Agent execution halted.`,
+      );
+    }
+
+    if (!custom || typeof custom !== "object" || Array.isArray(custom)) {
+      throw new Error(`[Fail-Closed] Agent Contract at ${contractPath} must be a valid JSON object.`);
+    }
+
+    if (custom.protectedPaths && !Array.isArray(custom.protectedPaths)) {
+      throw new Error(`[Fail-Closed] Agent Contract: protectedPaths must be an array of string paths.`);
+    }
+
+    if (
+      custom.forbiddenActions &&
+      (typeof custom.forbiddenActions !== "object" || Array.isArray(custom.forbiddenActions))
+    ) {
+      throw new Error(`[Fail-Closed] Agent Contract: forbiddenActions must be an object.`);
+    }
+
+    return {
+      ...DEFAULT_AGENT_CONTRACT,
+      ...custom,
+      protectedPaths: [
+        ...new Set([
+          ...DEFAULT_AGENT_CONTRACT.protectedPaths,
+          ...(custom.protectedPaths || []),
+        ]),
+      ],
+      forbiddenActions: {
+        ...DEFAULT_AGENT_CONTRACT.forbiddenActions,
+        ...(custom.forbiddenActions || {}),
+      },
+    };
   }
   return DEFAULT_AGENT_CONTRACT;
 }
@@ -242,7 +272,30 @@ export function loadApprovedDependencyNames(projectRoot = process.cwd()) {
   }
 
   try {
-    const content = readFileSync(depsPath, "utf8");
+    let content = "";
+    // Root-of-trust check: if docs/standards/dependencies.md has uncommitted modifications,
+    // prevent agent from self-authorizing new dependencies! Load authoritative content from HEAD.
+    try {
+      const relPath = normalizeRelPath(depsPath.replace(resolve(projectRoot), ""));
+      const isModified = execSync(`git status --porcelain -- "${relPath}"`, {
+        cwd: projectRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim().length > 0;
+
+      if (isModified) {
+        content = execSync(`git show HEAD:"${relPath}"`, {
+          cwd: projectRoot,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+      } else {
+        content = readFileSync(depsPath, "utf8");
+      }
+    } catch {
+      content = readFileSync(depsPath, "utf8");
+    }
+
     const names = content
       .split("\n")
       .filter((l) => /^\|\s*[@a-z0-9]/.test(l))
