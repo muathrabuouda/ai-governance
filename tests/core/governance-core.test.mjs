@@ -24,6 +24,7 @@ import {
 
 import {
   approveSpec,
+  rebaselineSpec,
   calculateBlockHash,
   deprecateStory,
   getGitAttestation,
@@ -1018,6 +1019,66 @@ test("verifies criteria 1.1 and 1.2", () => {});
         const checkNormalWrite = canAgentExecuteAction("write", "src/features/billing.ts", context);
         assert.equal(checkNormalWrite.allowed, true);
         assert.equal(checkNormalWrite.reason, null);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("enforces fail-closed behavior when agent contract JSON is corrupted or malformed", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-agent-failclosed-"));
+      try {
+        const govDir = join(tempDir, ".governance");
+        mkdirSync(govDir, { recursive: true });
+
+        // 1. Corrupted JSON file must throw Fail-Closed error
+        writeFileSync(join(govDir, "agent-contract.json"), "{ corrupted_json: true,", "utf8");
+        assert.throws(
+          () => loadAgentContract(tempDir),
+          /Fail-Closed.*corrupted or invalid JSON/i,
+          "loadAgentContract must fail closed on malformed JSON",
+        );
+
+        // 2. Invalid schema (non-object) must throw Fail-Closed error
+        writeFileSync(join(govDir, "agent-contract.json"), JSON.stringify(["not", "an", "object"]), "utf8");
+        assert.throws(
+          () => loadAgentContract(tempDir),
+          /Fail-Closed.*must be a valid JSON object/i,
+          "loadAgentContract must fail closed on array root",
+        );
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("establishes migration baseline anchor to verify legacy specifications", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-baseline-test-"));
+      try {
+        const docsDir = join(tempDir, "docs", "foundation");
+        const govDir = join(tempDir, ".governance");
+        mkdirSync(docsDir, { recursive: true });
+        mkdirSync(govDir, { recursive: true });
+
+        const specContent = `# Specification
+### Story 1: Foundation
+| ID  | Given | When | Then |
+| :-- | :--- | :--- | :--- |
+| 1.1 | Initial setup | Initialized | Works |
+`;
+        writeFileSync(join(docsDir, "02-spec.md"), specContent, "utf8");
+
+        // Rebaseline spec
+        const res = rebaselineSpec(
+          "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
+          "Migration baseline for tests",
+          {},
+          tempDir,
+        );
+        assert.equal(res, true);
+
+        const state = JSON.parse(readFileSync(join(govDir, "state.json"), "utf8"));
+        assert.ok(state.baseline);
+        assert.equal(state.baseline.blockIndex, 0);
+        assert.equal(state.auditLog[0].action, "RE_BASELINE");
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
