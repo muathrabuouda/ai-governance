@@ -38,23 +38,39 @@ jobs:
         with:
           node-version: 22
 
+      - name: Import Authorized Governance GPG Public Keys
+        run: |
+          if [ -d ".governance/keys" ] && compgen -G ".governance/keys/*.asc" > /dev/null; then
+            echo "[STAGE] Importing authorized approver public keys from .governance/keys/..."
+            for keyfile in .governance/keys/*.asc; do
+              echo "[INFO] Importing $keyfile"
+              gpg --batch --import "$keyfile"
+            done
+            # Set ultimate ownertrust (level 6) for all imported keys to verify Git signatures cleanly (%G? = G)
+            gpg --list-keys --fingerprint --with-colons | grep -E '^fpr:' | awk -F: '{print $10":6:"}' | gpg --import-ownertrust || true
+            echo "[PASS] Authorized GPG public keys imported and trusted."
+          else
+            echo "[WARN] No public keys found in .governance/keys/"
+          fi
+
       - name: Verify Strict Signatures on Governance State or Criteria Changes
         run: |
           # Detect whether the pushed commit or PR modified .governance/state.json or docs/foundation/02-spec.md
-          BASE_REF="${{ github.event.before }}"
-          if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
-            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" 2>/dev/null || git diff-tree --no-commit-id --name-only -r -m HEAD)
+          elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            CHANGED_FILES=$(git diff --name-only "${{ github.event.before }}" HEAD 2>/dev/null || git diff-tree --no-commit-id --name-only -r -m HEAD)
           else
-            CHANGED_FILES=$(git diff --name-only "$BASE_REF" HEAD 2>/dev/null || git diff-tree --no-commit-id --name-only -r HEAD)
+            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r -m HEAD)
           fi
 
           GOV_CHANGES=$(echo "$CHANGED_FILES" | grep -E '^(\.governance/state\.json|docs/foundation/02-spec\.md)' || true)
 
           if [ -n "$GOV_CHANGES" ]; then
-            echo "[INFO] Governance state or specification files modified in this push:"
+            echo "[INFO] Governance state or specification files modified in this event:"
             echo "$GOV_CHANGES"
             echo "[STAGE] Enforcing strict cryptographic signature verification on governance modification..."
             node bin/governance.mjs check --profile=strict
           else
-            echo "[PASS] No governance state or specification modifications detected in this push. Standard profile is sufficient."
+            echo "[PASS] No governance state or specification modifications detected in this event. Standard profile is sufficient."
           fi
