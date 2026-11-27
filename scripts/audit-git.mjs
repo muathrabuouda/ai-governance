@@ -25,7 +25,7 @@ const CONVENTIONAL_TYPES = [
   "revert",
 ];
 
-const COMMIT_REGEX = new RegExp(`^(${CONVENTIONAL_TYPES.join("|")})(\\([a-z0-9_-]+\\))?: [a-z0-9].{0,71}$`);
+const COMMIT_REGEX = new RegExp(`^(${CONVENTIONAL_TYPES.join("|")})(\\([a-z0-9_-]+\\))?: [a-z0-9].{0,99}$`);
 
 /**
  * Validates a single commit message.
@@ -43,8 +43,8 @@ export function validateCommitMessage(message) {
 
   const [subject] = trimmed.split("\n");
 
-  if (subject.length > 72) {
-    errors.push(`Subject line is ${subject.length} characters (maximum allowed is 72).`);
+  if (subject.length > 100) {
+    errors.push(`Subject line is ${subject.length} characters (maximum allowed is 100).`);
   }
 
   if (subject.endsWith(".")) {

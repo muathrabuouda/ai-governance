@@ -424,6 +424,67 @@ Some descriptive text without any table.
       );
     });
 
+    test("treats empty allowedKeyFingerprints as blocking rejection in strict mode", () => {
+      const candidateKey = {
+        signerFingerprint: "173E65E275BE3CD344241ECC0F2E74E6E851065E",
+        signerKeyId: "0F2E74E6E851065E",
+      };
+
+      // 1. isKeyFingerprintAuthorized must never authorize when allowedKeys is empty, null, or non-array
+      assert.equal(isKeyFingerprintAuthorized(candidateKey, []), false);
+      assert.equal(isKeyFingerprintAuthorized(candidateKey, null), false);
+      assert.equal(isKeyFingerprintAuthorized(candidateKey, undefined), false);
+
+      // 2. Reject rogue key when authorized list has a specific key
+      const rogueKey = {
+        signerFingerprint: "E9289A7C191137B4AABBCCDDEEFF001122334455",
+        signerKeyId: "E9289A7C191137B4",
+      };
+      assert.equal(
+        isKeyFingerprintAuthorized(rogueKey, ["173E65E275BE3CD344241ECC0F2E74E6E851065E"]),
+        false,
+        "Rogue key with valid format must be blocked when not in allowed list",
+      );
+
+      // 3. verifyAuditChain in strict mode must report a violation if allowedKeyFingerprints is empty
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-empty-keys-"));
+      try {
+        const govDir = join(tempDir, ".governance");
+        mkdirSync(govDir, { recursive: true });
+        writeFileSync(
+          join(govDir, "authorized-approvers.json"),
+          JSON.stringify({ allowedKeyFingerprints: [] }),
+          "utf8",
+        );
+        const dummyState = {
+          auditLog: [
+            {
+              index: 0,
+              timestamp: new Date().toISOString(),
+              action: "APPROVE_SPEC",
+              author: "Tester",
+              previousHash: "0000000000000000000000000000000000000000000000000000000000000000",
+              details: {},
+              attestation: {
+                commitSha: "1111111111111111111111111111111111111111",
+                treeHash: "2222222222222222222222222222222222222222",
+                signatureStatus: "G",
+              },
+              hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            },
+          ],
+        };
+        const res = verifyAuditChain(dummyState, tempDir, { strict: true });
+        assert.equal(res.ok, false);
+        assert.ok(
+          res.violations.some((v) => v.includes("allowedKeyFingerprints") || v.includes("cannot be empty")),
+          "Must report violation for empty allowedKeyFingerprints in strict mode",
+        );
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
     test("detects tampering when headAnchor is deleted or missing in strict mode", () => {
       const block0 = {
         index: 0,
@@ -510,10 +571,28 @@ Some descriptive text without any table.
         // Default empty directory resolves to false
         assert.equal(resolveStrictEnforcement(tempDir), false);
 
-        // When authorized-approvers.json defines allowedKeyFingerprints, it resolves to true
+        // When authorized-approvers.json defines strictKeyEnforcement: true, it resolves to true
         writeFileSync(
           join(govDir, "authorized-approvers.json"),
-          JSON.stringify({ allowedKeyFingerprints: ["4A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B"] }),
+          JSON.stringify({
+            strictKeyEnforcement: true,
+            allowedKeyFingerprints: ["4A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B"],
+          }),
+          "utf8",
+        );
+        assert.equal(resolveStrictEnforcement(tempDir), true);
+
+        // When policy.json defines profile: "strict", it resolves to true
+        writeFileSync(
+          join(govDir, "authorized-approvers.json"),
+          JSON.stringify({
+            allowedKeyFingerprints: ["4A8B9C0D1E2F3A4B5C6D7E8F9A0B1C2D3E4F5A6B"],
+          }),
+          "utf8",
+        );
+        writeFileSync(
+          join(govDir, "policy.json"),
+          JSON.stringify({ profile: "strict" }),
           "utf8",
         );
         assert.equal(resolveStrictEnforcement(tempDir), true);
