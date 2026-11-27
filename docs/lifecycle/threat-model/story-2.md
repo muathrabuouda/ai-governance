@@ -40,8 +40,10 @@ The platform separates verification into two distinct trust boundaries:
   │   └── Traceable Commit: pushes state updates without [skip ci] to trigger CI verification
   └── check.yml:
       ├── Standard Governance Gate: runs test suite, formatting, lint, typecheck, audit, and criteria integrity
-      └── Strict Governance Audit Job: automatically detects changes to .governance/state.json or 02-spec.md
-          and enforces --profile=strict commit signature verification on sensitive modifications
+      └── Strict Governance Audit Job:
+          ├── GPG Public Key Import: imports approver public keys from .governance/keys/*.asc with ultimate ownertrust (6)
+          ├── Accurate PR Diff: uses git diff origin/${{ github.base_ref }}...HEAD to detect governance modifications on PR merge commits
+          └── Strict Verification: enforces --profile=strict commit signature verification against allowedKeyFingerprints
 ```
 
 ---
@@ -52,6 +54,7 @@ The platform separates verification into two distinct trust boundaries:
 | :--- | :--- | :--- | :--- |
 | **Spoofing** | Attacker sets forged `git config user.name` or `user.email` to impersonate an authorized approver. | In strict mode (`strictKeyEnforcement`), approval requires `%G? === "G"` and compares full 40-char fingerprint (`%GF`), primary fingerprint (`%GP`), and long key ID (`%GK` >= 16 hex) against `allowedKeyFingerprints`. Forged text configs are rejected. | `approveSpec` Key Fingerprint Guard |
 | **Spoofing (Evil32 Collision)** | Attacker generates colliding 32-bit (8 hex char) key ID to match an approver's short ID. | `isKeyFingerprintAuthorized` enforces a minimum length of 16 hex characters, rejecting 32-bit short key IDs in both candidate and allowed lists. Full 40/64-char fingerprints are preferred. | `isKeyFingerprintAuthorized` |
+| **Spoofing (Rogue Key & Empty Whitelist)** | Attacker creates arbitrary GPG key with victim's identity and attempts to pass signature check when whitelist is empty. | In strict mode, an empty `allowedKeyFingerprints` is a fatal blocking failure. Keys are checked against explicitly registered fingerprints in `authorized-approvers.json`. | `verifyAuditChain` & `isKeyFingerprintAuthorized` |
 | **Tampering (Dirty Working Tree)** | Agent alters `state.json` or criteria in local working directory without committing, borrowing previous signed HEAD. | In strict mode, `verifyAuditChain` runs `git diff HEAD -- .governance/state.json docs/foundation/02-spec.md`. Any uncommitted modifications trigger an immediate blocking security failure. | `verifyAuditChain` Dirty Diff Guard |
 | **Tampering (Anchor Stripping)** | Agent deletes `headAnchor` from `state.json` to bypass external Git and tag checks. | In strict mode, `verifyAuditChain` fails immediately if `headAnchor` is missing. Git tag anchor and state commit signature checks execute unconditionally regardless of JSON properties. | `verifyAuditChain` Unconditional Check |
 | **Tampering (Signature Borrowing)** | Agent alters criteria uncommitted and invokes `approve:spec` to borrow the previous commit's signature. | `approveSpec` checks `git diff HEAD -- docs/foundation/02-spec.md` in strict mode; any uncommitted criteria change immediately aborts approval. Furthermore, `verifyAuditChain` verifies that the commit modifying `.governance/state.json` is signed with an authorized key. | Anti-Borrowing Diff Guard & State Commit Verification |
