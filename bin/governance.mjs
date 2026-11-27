@@ -34,9 +34,20 @@ import {
   resolveStrictEnforcement,
 } from "../scripts/state-guardian.mjs";
 import { loadPolicy, evaluateGate, GateStatus } from "../scripts/policy-engine.mjs";
-import { generateVerdict, loadLatestVerdict, formatVerdictTerminal } from "../scripts/verdict-engine.mjs";
+import {
+  generateVerdict,
+  loadLatestVerdict,
+  formatVerdictTerminal,
+  signVerdict,
+} from "../scripts/verdict-engine.mjs";
 import { buildTraceabilityMatrix, formatTraceabilityTerminal } from "../scripts/traceability.mjs";
-import { auditAgentChanges, formatAgentAuditTerminal, initAgentContract } from "../scripts/agent-control.mjs";
+import {
+  auditAgentChanges,
+  formatAgentAuditTerminal,
+  initAgentContract,
+  canAgentExecuteAction,
+  installAgentPreCommitHook,
+} from "../scripts/agent-control.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -162,7 +173,13 @@ const COMMANDS = {
 
       const profileArg = args.find((a) => a.startsWith("--profile="));
       const profileOverride = profileArg ? profileArg.replace("--profile=", "").trim() : undefined;
-      const policy = loadPolicy(process.cwd(), profileOverride);
+      let policy;
+      try {
+        policy = loadPolicy(process.cwd(), profileOverride);
+      } catch (err) {
+        console.error(`\n[FAIL] Policy Error (Fail-Closed): ${err.message}`);
+        process.exit(1);
+      }
       const stacks = detectStacks(process.cwd());
       console.log(`[INFO] Active Policy Profile: ${policy.profile} (${policy.profileDescription})`);
       console.log(`[INFO] Detected Stacks: ${stacks.map((s) => s.name).join(" + ")}`);
@@ -469,6 +486,19 @@ const COMMANDS = {
       console.log(formatVerdictTerminal(v));
     },
   },
+  "evidence:sign": {
+    description: "Cryptographically sign verdict.json with GPG private key: governance evidence:sign [--key=<keyId>]",
+    action: () => {
+      const keyArg = args.find((a) => a.startsWith("--key="))?.replace("--key=", "").trim();
+      const res = signVerdict(process.cwd(), { keyId: keyArg });
+      if (res.signed) {
+        console.log(`[PASS] Evidence successfully signed with GPG detached signature: ${res.signaturePath}`);
+      } else {
+        console.error(`[FAIL] Evidence signing failed: ${res.error}`);
+        process.exit(1);
+      }
+    },
+  },
   trace: {
     description: "Display requirement-to-code and test traceability matrix: governance trace [story-number]",
     action: () => {
@@ -485,6 +515,35 @@ const COMMANDS = {
       if (!res.passed) {
         process.exit(1);
       }
+    },
+  },
+  "agent:check": {
+    description: "Check pre-execution agent permission: governance agent:check --action=<action> --target=<path>",
+    action: () => {
+      const actionArg = args.find((a) => a.startsWith("--action="))?.replace("--action=", "").trim();
+      const targetArg = args.find((a) => a.startsWith("--target="))?.replace("--target=", "").trim();
+
+      if (!actionArg || !targetArg) {
+        console.error("Usage: governance agent:check --action=<write|modify|delete|add_dependency> --target=<path>");
+        process.exit(1);
+      }
+
+      const check = canAgentExecuteAction(actionArg, targetArg, { projectRoot: process.cwd() });
+      if (check.allowed) {
+        console.log(`[PASS] Action "${actionArg}" on "${targetArg}" is ALLOWED by agent contract.`);
+        process.exit(0);
+      } else {
+        console.error(`[FAIL] Permission Denied: ${check.reason}`);
+        console.error(`       Rule: ${check.rule}`);
+        process.exit(1);
+      }
+    },
+  },
+  "agent:install-hook": {
+    description: "Install Git pre-commit hook to enforce agent permissions before commit",
+    action: () => {
+      installAgentPreCommitHook(process.cwd());
+      console.log(`[PASS] Agent pre-commit hook installed successfully in .git/hooks/pre-commit`);
     },
   },
   "init:contract": {

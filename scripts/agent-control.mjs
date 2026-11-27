@@ -194,6 +194,29 @@ export function auditAgentChanges(projectRoot = process.cwd(), options = {}) {
         `[FORBIDDEN ACTION] Agent attempted to modify existing ADR "${filePath}". Architecture Decision Records are immutable; record a new superseding ADR instead.`,
       );
     }
+
+    // 4. Check Unapproved Dependency Additions on package.json modification
+    if (
+      contract.forbiddenActions.unapprovedDependencyAdditions &&
+      (filePath === "package.json" || filePath.endsWith("/package.json"))
+    ) {
+      try {
+        const fullPkgPath = resolve(projectRoot, filePath);
+        if (existsSync(fullPkgPath)) {
+          const pkg = JSON.parse(readFileSync(fullPkgPath, "utf8"));
+          const currentDeps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
+          const approved = loadApprovedDependencyNames(projectRoot);
+          const unapproved = currentDeps.filter((d) => !approved.has(d));
+          if (unapproved.length > 0) {
+            violations.push(
+              `[FORBIDDEN ACTION] Agent added unapproved dependency (${unapproved.join(", ")}). All packages must be pre-approved in docs/standards/dependencies.md.`,
+            );
+          }
+        }
+      } catch {
+        // Fallback
+      }
+    }
   }
 
   return {
@@ -202,6 +225,122 @@ export function auditAgentChanges(projectRoot = process.cwd(), options = {}) {
     warnings,
     auditedFiles,
   };
+}
+
+/**
+ * Reads approved dependencies from docs/standards/dependencies.md or docs/dependencies.md.
+ * @param {string} [projectRoot]
+ * @returns {Set<string>}
+ */
+export function loadApprovedDependencyNames(projectRoot = process.cwd()) {
+  const standardDepsPath = resolve(projectRoot, "docs/standards/dependencies.md");
+  const legacyDepsPath = resolve(projectRoot, "docs/dependencies.md");
+  const depsPath = existsSync(standardDepsPath) ? standardDepsPath : legacyDepsPath;
+
+  if (!existsSync(depsPath)) {
+    return new Set();
+  }
+
+  try {
+    const content = readFileSync(depsPath, "utf8");
+    const names = content
+      .split("\n")
+      .filter((l) => /^\|\s*[@a-z0-9]/.test(l))
+      .map((l) => l.split("|")[1]?.trim())
+      .filter(Boolean);
+    return new Set(names);
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Pre-execution permission check to determine if an action by an agent on a target path is permitted.
+ * Can be invoked prior to writing, modifying, or deleting files or running dependency commands.
+ *
+ * @param {string} action - Action type: "write" | "modify" | "delete" | "add_dependency"
+ * @param {string} targetPath - Relative target path or package identifier
+ * @param {object} [context] - Context details (e.g. { projectRoot })
+ * @returns {{ allowed: boolean, reason: string|null, rule: string|null }}
+ */
+export function canAgentExecuteAction(action, targetPath, context = {}) {
+  const projectRoot = context.projectRoot || process.cwd();
+  const contract = loadAgentContract(projectRoot);
+
+  // 1. Check Protected Paths
+  if (action === "write" || action === "modify" || action === "delete") {
+    const protectedMatch = isPathProtected(targetPath, contract.protectedPaths);
+    if (protectedMatch) {
+      return {
+        allowed: false,
+        reason: `Target path "${targetPath}" is protected under rule "${protectedMatch}". Direct agent alteration requires human authorization.`,
+        rule: `protectedPaths:${protectedMatch}`,
+      };
+    }
+  }
+
+  // 2. Check Test Deletions
+  if (action === "delete" && contract.forbiddenActions.deleteTestFiles) {
+    const norm = normalizeRelPath(targetPath);
+    if (
+      norm.startsWith("test/") ||
+      norm.startsWith("tests/") ||
+      norm.includes(".test.") ||
+      norm.includes(".spec.")
+    ) {
+      return {
+        allowed: false,
+        reason: `Deleting test file "${targetPath}" is strictly prohibited by agent contract.`,
+        rule: "forbiddenActions:deleteTestFiles",
+      };
+    }
+  }
+
+  // 3. Check ADR modifications
+  if (action === "modify" && contract.forbiddenActions.modifyExistingAdrs) {
+    const norm = normalizeRelPath(targetPath);
+    if (norm.startsWith("docs/foundation/adr/")) {
+      return {
+        allowed: false,
+        reason: `Modifying existing Architecture Decision Record "${targetPath}" is prohibited. Create a new superseding ADR instead.`,
+        rule: "forbiddenActions:modifyExistingAdrs",
+      };
+    }
+  }
+
+  // 4. Check Unapproved Dependency Additions
+  if (action === "add_dependency" && contract.forbiddenActions.unapprovedDependencyAdditions) {
+    const approved = loadApprovedDependencyNames(projectRoot);
+    if (!approved.has(targetPath)) {
+      return {
+        allowed: false,
+        reason: `Package "${targetPath}" is not approved in docs/standards/dependencies.md. Unapproved dependency additions are prohibited.`,
+        rule: "forbiddenActions:unapprovedDependencyAdditions",
+      };
+    }
+  }
+
+  return {
+    allowed: true,
+    reason: null,
+    rule: null,
+  };
+}
+
+/**
+ * Installs Git pre-commit hook in .git/hooks/pre-commit for real-time agent boundary enforcement.
+ * @param {string} [projectRoot]
+ * @returns {boolean}
+ */
+export function installAgentPreCommitHook(projectRoot = process.cwd()) {
+  const hooksDir = resolve(projectRoot, ".git", "hooks");
+  if (!existsSync(hooksDir)) {
+    mkdirSync(hooksDir, { recursive: true });
+  }
+  const hookFile = resolve(hooksDir, "pre-commit");
+  const scriptContent = `#!/bin/sh\n# AI Governance Agent Pre-Commit Hook\nnode bin/governance.mjs agent:audit || {\n  echo "[FAIL] Pre-commit agent boundary enforcement failed!"\n  exit 1\n}\n`;
+  writeFileSync(hookFile, scriptContent, { mode: 0o755 });
+  return true;
 }
 
 /**
