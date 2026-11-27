@@ -116,11 +116,24 @@ export function generateVerdict(
     })),
   };
 
-  // Generate cryptographic signature of verdict payload
-  const signature = hashData(rawVerdict);
+  // Generate cryptographic content digest of verdict payload
+  const digestValue = hashData(rawVerdict);
   const verdict = {
     ...rawVerdict,
-    signature,
+    contentDigest: {
+      algorithm: "sha256",
+      value: digestValue,
+    },
+    digitalProof: {
+      type: gitMeta.signatureStatus === "G" ? "git-gpg" : "none",
+      status: gitMeta.signatureStatus || "N",
+      signerName: gitMeta.signerName || null,
+      signerKey: gitMeta.signerKey || null,
+      signerKeyId: gitMeta.signerKeyId || null,
+      signerFingerprint: gitMeta.signerFingerprint || null,
+      verified: gitMeta.signatureStatus === "G",
+    },
+    signature: digestValue, // Retained for backward-compatible consumption
   };
 
   const evidenceDir = getEvidenceDir(projectRoot);
@@ -197,7 +210,8 @@ export function generateReportMarkdown(verdict) {
 > **Verdict:** **${badgeMap[verdict.verdict] || verdict.verdict}**  
 > **Summary:** ${verdict.summary}  
 > **Timestamp:** ${verdict.timestamp} (${verdict.durationMs}ms)  
-> **Cryptographic Signature:** \`${verdict.signature}\`
+> **Content Digest (SHA-256):** \`${verdict.contentDigest?.value || verdict.signature}\`  
+> **Digital Issuer Proof:** ${sigDescription}
 
 ---
 
@@ -271,4 +285,40 @@ export function formatVerdictTerminal(verdict) {
   ];
 
   return lines.join("\n");
+}
+
+/**
+ * Cryptographically signs a verdict file using GPG detached signature.
+ * @param {string} [projectRoot]
+ * @param {{ keyId?: string }} [options]
+ * @returns {{ signed: boolean, signaturePath: string|null, error: string|null }}
+ */
+export function signVerdict(projectRoot = process.cwd(), options = {}) {
+  const evidenceDir = getEvidenceDir(projectRoot);
+  const verdictPath = resolve(evidenceDir, "verdict.json");
+  if (!existsSync(verdictPath)) {
+    return { signed: false, signaturePath: null, error: "verdict.json not found" };
+  }
+
+  const sigPath = resolve(evidenceDir, "verdict.json.asc");
+  const keyArg = options.keyId ? `-u "${options.keyId}"` : "";
+
+  try {
+    execSync(`gpg --batch --yes --armor --detach-sign ${keyArg} --output "${sigPath}" "${verdictPath}"`, {
+      cwd: projectRoot,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+
+    return {
+      signed: true,
+      signaturePath: sigPath,
+      error: null,
+    };
+  } catch (err) {
+    return {
+      signed: false,
+      signaturePath: null,
+      error: err.message,
+    };
+  }
 }
