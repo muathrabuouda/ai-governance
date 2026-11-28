@@ -205,8 +205,7 @@ export function loadPolicy(projectRoot = process.cwd(), profileOverride) {
 
   // Find profile definition (built-in or custom user-defined in policy.profiles)
   const profileDef =
-    BUILTIN_PROFILES[requestedProfile] ||
-    (custom.profiles && custom.profiles[requestedProfile]);
+    BUILTIN_PROFILES[requestedProfile] || (custom.profiles && custom.profiles[requestedProfile]);
 
   if (!profileDef) {
     const available = [
@@ -234,15 +233,15 @@ export function loadPolicy(projectRoot = process.cwd(), profileOverride) {
 
     resolvedGates[key] = isCliOverride
       ? {
-        ...baseConfig,
-        ...customConfig,
-        ...profileOverrideConfig,
-      }
+          ...baseConfig,
+          ...customConfig,
+          ...profileOverrideConfig,
+        }
       : {
-        ...baseConfig,
-        ...profileOverrideConfig,
-        ...customConfig,
-      };
+          ...baseConfig,
+          ...profileOverrideConfig,
+          ...customConfig,
+        };
   }
 
   const resolvedPolicy = {
