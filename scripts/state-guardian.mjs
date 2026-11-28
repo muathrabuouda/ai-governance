@@ -218,7 +218,10 @@ export function getGitAttestation(projectRoot = process.cwd()) {
  */
 export function normalizeKey(key) {
   if (typeof key !== "string") return "";
-  return key.replace(/[\s:]+/g, "").replace(/^0x/i, "").toLowerCase();
+  return key
+    .replace(/[\s:]+/g, "")
+    .replace(/^0x/i, "")
+    .toLowerCase();
 }
 
 /**
@@ -392,9 +395,7 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
     } else {
       try {
         const authData = JSON.parse(readFileSync(authFile, "utf8"));
-        strictAllowedKeys = Array.isArray(authData)
-          ? authData
-          : authData?.allowedKeyFingerprints || [];
+        strictAllowedKeys = Array.isArray(authData) ? authData : authData?.allowedKeyFingerprints || [];
 
         if (strictAllowedKeys.length === 0) {
           violations.push(
@@ -450,7 +451,11 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
     // If a migration baseline exists, legacy blocks strictly prior to baseline are verified
     // for hash integrity and chain continuity, while GPG signature is required from baseline onwards.
     const requiresSignature = baselineIndex === -1 ? true : i >= baselineIndex;
-    if (isStrict && requiresSignature && (block.action === "APPROVE_SPEC" || block.action === "RE_BASELINE")) {
+    if (
+      isStrict &&
+      requiresSignature &&
+      (block.action === "APPROVE_SPEC" || block.action === "RE_BASELINE")
+    ) {
       const sigStatus = block.attestation?.signatureStatus || "N";
       if (sigStatus !== "G") {
         violations.push(
@@ -511,11 +516,14 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
       // In strict mode, verify that the commit modifying .governance/state.json is cryptographically signed by an authorized key
       if (isStrict) {
         try {
-          const stateCommitData = execSync('git log -1 --format="%H|%G?|%GS|%GK|%GF|%GP" -- .governance/state.json', {
-            cwd: projectRoot,
-            stdio: ["ignore", "pipe", "ignore"],
-            encoding: "utf8",
-          }).trim();
+          const stateCommitData = execSync(
+            'git log -1 --format="%H|%G?|%GS|%GK|%GF|%GP" -- .governance/state.json',
+            {
+              cwd: projectRoot,
+              stdio: ["ignore", "pipe", "ignore"],
+              encoding: "utf8",
+            },
+          ).trim();
 
           if (stateCommitData) {
             const parts = stateCommitData.split("|");
@@ -531,13 +539,18 @@ export function verifyAuditChain(state, projectRoot = process.cwd(), options = {
             };
 
             const baselineCommit = state.baseline?.commitSha;
-            const isHistoricalUnsigned = baselineCommit && stateCommitSha === baselineCommit && state.baseline?.blockIndex !== undefined;
+            const isHistoricalUnsigned =
+              baselineCommit && stateCommitSha === baselineCommit && state.baseline?.blockIndex !== undefined;
 
             if (stateSigStatus !== "G" && !isHistoricalUnsigned) {
               violations.push(
                 `The commit modifying .governance/state.json lacks a verified cryptographic signature (status: "${stateSigStatus}"). Strict policy requires verified GPG/SSH commit signatures on state changes.`,
               );
-            } else if (stateSigStatus === "G" && strictAllowedKeys.length > 0 && !isKeyFingerprintAuthorized(stateMeta, strictAllowedKeys)) {
+            } else if (
+              stateSigStatus === "G" &&
+              strictAllowedKeys.length > 0 &&
+              !isKeyFingerprintAuthorized(stateMeta, strictAllowedKeys)
+            ) {
               violations.push(
                 `The commit modifying .governance/state.json was signed by an unauthorized key (${stateMeta.signerFingerprint || stateMeta.signerKey || "unknown"}). Key fingerprint is not listed in allowedKeyFingerprints in authorized-approvers.json.`,
               );
@@ -677,7 +690,9 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
 
   // Sanitize approver name to reject shell metacharacters and control characters (allows standard Name <email> format)
   if (typeof approver === "string" && /[;&|`$\n\r]/.test(approver)) {
-    console.error("[FAIL] Security Violation: Approver identifier contains illegal shell or control characters.");
+    console.error(
+      "[FAIL] Security Violation: Approver identifier contains illegal shell or control characters.",
+    );
     return false;
   }
 
@@ -730,7 +745,9 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
 
   if (strictKeyEnforcement) {
     if (!gitMeta.isGit) {
-      console.error("[FAIL] Security Violation: Strict specification approval requires an active Git repository.");
+      console.error(
+        "[FAIL] Security Violation: Strict specification approval requires an active Git repository.",
+      );
       return false;
     }
 
@@ -741,9 +758,7 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
       return false;
     }
 
-    const allowedKeys = Array.isArray(authData)
-      ? authData
-      : authData?.allowedKeyFingerprints || [];
+    const allowedKeys = Array.isArray(authData) ? authData : authData?.allowedKeyFingerprints || [];
 
     if (allowedKeys.length === 0) {
       console.error(
@@ -828,21 +843,33 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
   state.lastApprovedBy = resolvedAuthor;
   state.headAnchor = hashText(`${auditBlock.hash}:${attestation.commitSha}:${attestation.treeHash}`);
 
-  // External anchor: record in immutable Git Tag (signed tag when GPG is configured)
+  // External anchor: record in immutable Git Tag (signed tag mandatory in strict mode)
   if (gitMeta.isGit && gitMeta.commitSha !== "0000000000000000000000000000000000000000") {
     try {
-      execSync(`git tag -s "${tagName}" -m "Governance Spec Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`, {
-        cwd: projectRoot,
-        stdio: ["ignore", "ignore", "ignore"],
-      });
-    } catch {
-      try {
-        execSync(`git tag -a "${tagName}" -m "Governance Spec Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`, {
+      execSync(
+        `git tag -s "${tagName}" -m "Governance Spec Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`,
+        {
           cwd: projectRoot,
-          stdio: ["ignore", "ignore", "ignore"],
-        });
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+    } catch (_err) {
+      if (strictKeyEnforcement) {
+        console.error(
+          `[FAIL] Security Violation: Failed to create cryptographically signed Git tag "${tagName}". In strict mode, signed tag anchor is mandatory.`,
+        );
+        return false;
+      }
+      try {
+        execSync(
+          `git tag -a "${tagName}" -m "Governance Spec Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`,
+          {
+            cwd: projectRoot,
+            stdio: ["ignore", "ignore", "ignore"],
+          },
+        );
       } catch {
-        // Non-fatal if git tag creation fails
+        // Non-fatal if git tag creation fails in non-strict
       }
     }
   }
@@ -851,7 +878,9 @@ export function approveSpec(approver = "Engineer", options = {}, projectRoot = p
 
   console.log(`[PASS] Specification locked and approved by "${resolvedAuthor}"`);
   if (gitMeta.isGit && gitMeta.commitSha !== "0000000000000000000000000000000000000000") {
-    console.log(`       Git Anchor Commit: ${gitMeta.commitSha.slice(0, 10)} (Tree: ${gitMeta.treeHash.slice(0, 10)})`);
+    console.log(
+      `       Git Anchor Commit: ${gitMeta.commitSha.slice(0, 10)} (Tree: ${gitMeta.treeHash.slice(0, 10)})`,
+    );
   }
   console.log(`       Stories added: ${addedStories.length ? addedStories.join(", ") : "none"}`);
   console.log(`       Stories updated: ${updatedStories.length ? updatedStories.join(", ") : "none"}`);
@@ -892,7 +921,9 @@ export function rebaselineSpec(
 
   // 1. Sanitize approver name to reject shell metacharacters and control characters
   if (typeof resolvedAuthor === "string" && /[;&|`$\n\r]/.test(resolvedAuthor)) {
-    console.error("[FAIL] Security Violation: Approver identifier contains illegal shell or control characters.");
+    console.error(
+      "[FAIL] Security Violation: Approver identifier contains illegal shell or control characters.",
+    );
     return false;
   }
 
@@ -945,7 +976,9 @@ export function rebaselineSpec(
 
   if (strictKeyEnforcement) {
     if (!gitMeta.isGit) {
-      console.error("[FAIL] Security Violation: Strict migration baseline requires an active Git repository.");
+      console.error(
+        "[FAIL] Security Violation: Strict migration baseline requires an active Git repository.",
+      );
       return false;
     }
 
@@ -956,9 +989,7 @@ export function rebaselineSpec(
       return false;
     }
 
-    const allowedKeys = Array.isArray(authData)
-      ? authData
-      : authData?.allowedKeyFingerprints || [];
+    const allowedKeys = Array.isArray(authData) ? authData : authData?.allowedKeyFingerprints || [];
 
     if (allowedKeys.length === 0) {
       console.error(
@@ -1007,9 +1038,7 @@ export function rebaselineSpec(
   }
 
   const previousHash =
-    state.auditLog.length > 0
-      ? state.auditLog[state.auditLog.length - 1].hash
-      : GENESIS_PREVIOUS_HASH;
+    state.auditLog.length > 0 ? state.auditLog[state.auditLog.length - 1].hash : GENESIS_PREVIOUS_HASH;
 
   // Update story hashes with current criteria
   state.storyHashes = {};
@@ -1064,21 +1093,33 @@ export function rebaselineSpec(
   state.lastApprovedBy = resolvedAuthor;
   state.headAnchor = hashText(`${auditBlock.hash}:${attestation.commitSha}:${attestation.treeHash}`);
 
-  // Create signed tag anchor if in Git
+  // Create signed tag anchor if in Git (mandatory in strict mode)
   if (gitMeta.isGit && gitMeta.commitSha !== "0000000000000000000000000000000000000000") {
     try {
-      execSync(`git tag -s "${tagName}" -m "Governance Migration Baseline Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`, {
-        cwd: projectRoot,
-        stdio: ["ignore", "ignore", "ignore"],
-      });
-    } catch {
-      try {
-        execSync(`git tag -a "${tagName}" -m "Governance Migration Baseline Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`, {
+      execSync(
+        `git tag -s "${tagName}" -m "Governance Migration Baseline Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`,
+        {
           cwd: projectRoot,
-          stdio: ["ignore", "ignore", "ignore"],
-        });
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+    } catch (_err) {
+      if (strictKeyEnforcement) {
+        console.error(
+          `[FAIL] Security Violation: Failed to create cryptographically signed Git tag "${tagName}". In strict mode, signed tag anchor is mandatory.`,
+        );
+        return false;
+      }
+      try {
+        execSync(
+          `git tag -a "${tagName}" -m "Governance Migration Baseline Lock v${auditBlock.index}: ${auditBlock.hash}" HEAD`,
+          {
+            cwd: projectRoot,
+            stdio: ["ignore", "ignore", "ignore"],
+          },
+        );
       } catch {
-        // Non-fatal if tag creation fails
+        // Non-fatal if tag creation fails in non-strict
       }
     }
   }
@@ -1132,7 +1173,10 @@ export function deprecateStory(
       const tag = options.supersededBy
         ? `[DEPRECATED: SUPERSEDED BY STORY ${options.supersededBy}]`
         : `[DEPRECATED]`;
-      const storyHeaderRegex = new RegExp(`(###\\s+Story\\s+${storyKey}\\b[^\n]*?)(?!\\s*\\[DEPRECATED)`, "i");
+      const storyHeaderRegex = new RegExp(
+        `(###\\s+Story\\s+${storyKey}\\b[^\n]*?)(?!\\s*\\[DEPRECATED)`,
+        "i",
+      );
       if (storyHeaderRegex.test(specContent) && !specContent.includes(`Story ${storyKey} [DEPRECATED`)) {
         specContent = specContent.replace(storyHeaderRegex, `$1 ${tag}`);
         writeFileSync(specPath, specContent, "utf8");

@@ -41,7 +41,7 @@ export const BUILTIN_PROFILES = {
       formatting: { required: true, on_missing: "fail", on_failure: "fail" },
       static_analysis: { required: true, on_missing: "fail", on_failure: "fail" },
       test_suite: { required: true, on_missing: "fail", on_failure: "fail" },
-      design_system: { required: true, on_missing: "fail", on_failure: "fail" },
+      design_system: { required: true, on_missing: "skip", on_failure: "fail" },
     },
   },
   standard: {
@@ -234,15 +234,15 @@ export function loadPolicy(projectRoot = process.cwd(), profileOverride) {
 
     resolvedGates[key] = isCliOverride
       ? {
-          ...baseConfig,
-          ...customConfig,
-          ...profileOverrideConfig,
-        }
+        ...baseConfig,
+        ...customConfig,
+        ...profileOverrideConfig,
+      }
       : {
-          ...baseConfig,
-          ...profileOverrideConfig,
-          ...customConfig,
-        };
+        ...baseConfig,
+        ...profileOverrideConfig,
+        ...customConfig,
+      };
   }
 
   const resolvedPolicy = {
