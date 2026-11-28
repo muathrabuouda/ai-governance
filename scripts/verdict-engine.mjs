@@ -117,11 +117,6 @@ export function generateVerdict({ gateResults, policy, stacks, startTime }, proj
     })),
   };
 
-  // Verify genuine detached GPG signature on evidence artifact if present
-  const evidenceDir = getEvidenceDir(projectRoot);
-  const sigAscPath = resolve(evidenceDir, "verdict.json.asc");
-  const sigVerification = verifyEvidenceSignature(projectRoot);
-
   // Generate cryptographic content digest of verdict payload
   const digestValue = hashData(rawVerdict);
   const verdict = {
@@ -142,20 +137,13 @@ export function generateVerdict({ gateResults, policy, stacks, startTime }, proj
       verified: gitMeta.signatureStatus === "G",
     },
     evidenceAttestation: {
-      signed: sigVerification.verified,
-      type: sigVerification.verified
-        ? "detached-gpg"
-        : existsSync(sigAscPath)
-          ? "invalid-signature"
-          : "content_digest_only",
-      signatureFile: existsSync(sigAscPath) ? "verdict.json.asc" : null,
-      verified: sigVerification.verified,
-      signerKey: sigVerification.signerKey || null,
-      description: sigVerification.verified
-        ? `Cryptographically verified via detached GPG signature (key: ${sigVerification.signerKey})`
-        : existsSync(sigAscPath)
-          ? `GPG Signature verification failed: ${sigVerification.error}`
-          : "Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest)",
+      signed: false,
+      type: "content_digest_only",
+      signatureFile: null,
+      verified: false,
+      signerKey: null,
+      description:
+        "Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest)",
     },
     // Retained for backward-compatible consumption
     digitalProof: {
@@ -170,12 +158,41 @@ export function generateVerdict({ gateResults, policy, stacks, startTime }, proj
     signature: digestValue,
   };
 
+  const evidenceDir = getEvidenceDir(projectRoot);
   const verdictPath = resolve(evidenceDir, "verdict.json");
   const reportPath = resolve(evidenceDir, "report.md");
+  const sigAscPath = resolve(evidenceDir, "verdict.json.asc");
 
+  // Step 1: Write initial raw verdict payload to disk
   writeFileSync(verdictPath, JSON.stringify(verdict, null, 2), "utf8");
 
-  // Generate Human-Readable Markdown Report
+  // Step 2: Post-write verification - check whether any existing detached signature matches the new file
+  if (existsSync(sigAscPath)) {
+    const sigVerification = verifyEvidenceSignature(projectRoot);
+    if (sigVerification.verified) {
+      verdict.evidenceAttestation = {
+        signed: true,
+        type: "detached-gpg",
+        signatureFile: "verdict.json.asc",
+        verified: true,
+        signerKey: sigVerification.signerKey,
+        description: `Cryptographically verified via detached GPG signature (key: ${sigVerification.signerKey})`,
+      };
+      writeFileSync(verdictPath, JSON.stringify(verdict, null, 2), "utf8");
+    } else {
+      verdict.evidenceAttestation = {
+        signed: false,
+        type: "stale-signature",
+        signatureFile: "verdict.json.asc",
+        verified: false,
+        signerKey: sigVerification.signerKey || null,
+        description: `Stale detached GPG signature does not match regenerated verdict: ${sigVerification.error}. Run 'governance evidence:sign' to re-sign current verdict.`,
+      };
+      writeFileSync(verdictPath, JSON.stringify(verdict, null, 2), "utf8");
+    }
+  }
+
+  // Step 3: Generate Human-Readable Markdown Report
   const reportMarkdown = generateReportMarkdown(verdict);
   writeFileSync(reportPath, reportMarkdown, "utf8");
 
@@ -437,16 +454,36 @@ export function verifyEvidenceSignature(projectRoot = process.cwd()) {
     };
   }
 
-  // Load authorized approvers whitelist
+  // Load authorized approvers whitelist - Fail-closed enforcement
   const authFile = resolve(projectRoot, ".governance", "authorized-approvers.json");
+  if (!existsSync(authFile)) {
+    return {
+      verified: false,
+      signerName: null,
+      signerKey: null,
+      error: "missing_authorized_approvers_file",
+    };
+  }
+
   let allowedKeys = [];
-  if (existsSync(authFile)) {
-    try {
-      const authData = JSON.parse(readFileSync(authFile, "utf8"));
-      allowedKeys = authData.allowedKeyFingerprints || [];
-    } catch {
-      // Failed to parse approvers
+  try {
+    const authData = JSON.parse(readFileSync(authFile, "utf8"));
+    if (!Array.isArray(authData.allowedKeyFingerprints) || authData.allowedKeyFingerprints.length === 0) {
+      return {
+        verified: false,
+        signerName: null,
+        signerKey: null,
+        error: "no_authorized_approvers_configured",
+      };
     }
+    allowedKeys = authData.allowedKeyFingerprints;
+  } catch (err) {
+    return {
+      verified: false,
+      signerName: null,
+      signerKey: null,
+      error: `corrupt_authorized_approvers_file: ${err.message}`,
+    };
   }
 
   try {
@@ -470,9 +507,8 @@ export function verifyEvidenceSignature(projectRoot = process.cwd()) {
       };
     }
 
-    // Check against authorized approvers whitelist
-    const isAuthorized =
-      allowedKeys.length === 0 || isKeyFingerprintAuthorized({ signerFingerprint }, allowedKeys);
+    // Check against authorized approvers whitelist (Strict Fail-Closed: unauthorized keys rejected)
+    const isAuthorized = isKeyFingerprintAuthorized({ signerFingerprint }, allowedKeys);
 
     if (!isAuthorized) {
       return {
