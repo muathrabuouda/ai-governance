@@ -2,8 +2,8 @@
   "version": "1.0.0",
   "verdict": "APPROVED",
   "summary": "All active verification gates passed",
-  "timestamp": "2026-11-28T09:08:32.059Z",
-  "durationMs": 69523,
+  "timestamp": "2026-11-28T10:18:18.431Z",
+  "durationMs": 69462,
   "environment": {
     "platform": "win32",
     "nodeVersion": "v24.18.0",
@@ -13,8 +13,8 @@
     "isGit": true,
     "userName": "Muath R Abu Ouda",
     "userEmail": "muathrabuouda@hotmail.com",
-    "commitSha": "2ee5e52c281c3383cce6f900e905e0a9b5192bc1",
-    "treeHash": "881495ffe1ff3fd7b52b10a029532c190cd1b167",
+    "commitSha": "694420fd45af4299f2bb8f25933e601ab4da039a",
+    "treeHash": "9fe7dded01149baf5f3fd625376fbd3c54f78bc9",
     "signatureStatus": "G",
     "signerName": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
     "signerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
@@ -116,13 +116,13 @@
   ],
   "contentDigest": {
     "algorithm": "sha256",
-    "value": "c503804dea42fb8cc3b6a7a116f873f398d73d305bbc2a75aaf1f3f4f937a7db"
+    "value": "a5a68c8e87e8b55596486de064413577184ec39fca256dec6d9b795878464cbc"
   },
   "gitAttestation": {
     "isGit": true,
     "author": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
-    "commitSha": "2ee5e52c281c3383cce6f900e905e0a9b5192bc1",
-    "treeHash": "881495ffe1ff3fd7b52b10a029532c190cd1b167",
+    "commitSha": "694420fd45af4299f2bb8f25933e601ab4da039a",
+    "treeHash": "9fe7dded01149baf5f3fd625376fbd3c54f78bc9",
     "commitSignatureStatus": "G",
     "commitSignerName": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
     "commitSignerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
@@ -135,7 +135,7 @@
     "signatureFile": "verdict.json.asc",
     "verified": false,
     "signerKey": null,
-    "description": "Stale detached GPG signature does not match regenerated verdict: gpg_verification_failed: Command failed: \"C:/Program Files/Git/usr/bin/gpg.exe\" --batch --status-fd 1 --verify \"J:\\ugarit\\ugarit-ai\\ai-governance\\.governance\\evidence\\verdict.json.asc\" \"J:\\ugarit\\ugarit-ai\\ai-governance\\.governance\\evidence\\verdict.json\"\ngpg: Signature made Sat Nov 28 11:06:48 2026 JST\ngpg:                using EDDSA key 173E65E275BE3CD344241ECC0F2E74E6E851065E\ngpg: BAD signature from \"Muath R Abu Ouda <muathrabuouda@hotmail.com>\" [ultimate]\n. Run 'governance evidence:sign' to re-sign current verdict."
+    "description": "Stale detached GPG signature does not match regenerated verdict: gpg_verification_failed: Command failed: \"C:/Program Files/Git/usr/bin/gpg.exe\" --batch --status-fd 1 --verify \"J:\\ugarit\\ugarit-ai\\ai-governance\\.governance\\evidence\\verdict.json.asc\" \"J:\\ugarit\\ugarit-ai\\ai-governance\\.governance\\evidence\\verdict.json\"\ngpg: Signature made Sat Nov 28 11:08:43 2026 JST\ngpg:                using EDDSA key 173E65E275BE3CD344241ECC0F2E74E6E851065E\ngpg: BAD signature from \"Muath R Abu Ouda <muathrabuouda@hotmail.com>\" [ultimate]\n. Run 'governance evidence:sign' to re-sign current verdict."
   },
   "digitalProof": {
     "type": "git-commit-gpg",
@@ -146,5 +146,5 @@
     "signerFingerprint": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
     "verified": true
   },
-  "signature": "c503804dea42fb8cc3b6a7a116f873f398d73d305bbc2a75aaf1f3f4f937a7db"
+  "signature": "a5a68c8e87e8b55596486de064413577184ec39fca256dec6d9b795878464cbc"
 }
