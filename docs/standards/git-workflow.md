@@ -67,3 +67,28 @@ Direct commits to `main` are strictly prohibited in collaborative and production
 - **Zero Unilateral Commits:** AI agents must never run `git commit` or `git push` without an explicit instruction from the user.
 - **Unstaged Review:** All modified files must be presented or staged for inspection prior to commit creation.
 - **Clean Workspace Verification:** Agents must verify `git status` before and after operations to prevent unintended artifact commits.
+
+---
+
+## 5. Ugarit Tagging & Versioning Strategy (`xx.xx.xx`)
+
+All repositories across the Ugarit Ecosystem strictly adhere to the unified versioning standard:
+`v[MAJOR].[MINOR].[PATCH]` with **mandatory two-digit padding** for minor and patch segments (`xx.xx.xx`).
+
+### Tag Structure & Format
+- **Baseline Version:** Starts at `v1.00.00`.
+- **Two-Digit Invariant:** Single-digit versions (such as `v1.1.0` or `v1.1.2`) are strictly prohibited and purged.
+- **Cryptographic Attestation:** Every release tag must be GPG-signed (`git tag -s`) using the authorized GPG key.
+
+### Per-Commit Version Progression Law
+Version tags advance deterministically with each commit according to its Conventional Commit classification:
+
+| Commit Classification | Trigger Condition | Version Transition | Zeroing Rule | Example |
+| :--- | :--- | :--- | :--- | :--- |
+| **Patch Release** | `fix:`, `chore:`, `test:`, `style:`, `refactor:`, `perf:`, `docs:` | `vM.m.(p+1)` | Increments patch by 1 | `v1.01.01` ➔ `v1.01.02` |
+| **Minor Release** | `feat:` or `feat(...):` (new architectural/functional capability) | `vM.(m+1).00` | Increments minor by 1, **resets patch to 00** | `v1.01.04` ➔ `v1.02.00` |
+| **Major Release** | `BREAKING CHANGE` or `feat!:` / `fix!:` (breaking API/architecture) | `v(M+1).00.00` | Increments major by 1, **resets minor & patch to 00** | `v1.05.04` ➔ `v2.00.00` |
+
+### Legacy Tag Pruning & Enforcement
+- Legacy or upstream tags that deviate from `vXX.XX.XX` (e.g. `v1.1.0`, `v5.x`) must be immediately deleted.
+- Automated tag audit and bump commands are provided via `governance tag:audit` and `governance tag:bump`.

@@ -56,6 +56,13 @@ import {
   getAgentExecutionHistory,
   getAgentExecutionLogPath,
 } from "../../scripts/gateway.mjs";
+import {
+  parseUgaritVersion,
+  formatUgaritVersion,
+  classifyCommitBump,
+  computeNextTag,
+  auditRepositoryTags,
+} from "../../scripts/tag-manager.mjs";
 
 describe("Governance Core Integration Tests", () => {
   describe("Policy Engine", () => {
@@ -1363,6 +1370,72 @@ test("Story 1 [AC-1.2] invalid actor denied", () => {});
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe("Ugarit Tagging & Versioning Manager (xx.xx.xx Standard)", () => {
+    test("parseUgaritVersion validates xx.xx.xx format and rejects single-digit legacy tags", () => {
+      const vValid1 = parseUgaritVersion("v1.01.02");
+      assert.ok(vValid1);
+      assert.equal(vValid1.major, 1);
+      assert.equal(vValid1.minor, 1);
+      assert.equal(vValid1.patch, 2);
+
+      const vValid2 = parseUgaritVersion("1.00.00");
+      assert.ok(vValid2);
+      assert.equal(vValid2.major, 1);
+      assert.equal(vValid2.minor, 0);
+      assert.equal(vValid2.patch, 0);
+
+      // Rejects single-digit non-standard tags
+      assert.equal(parseUgaritVersion("v1.1.0"), null);
+      assert.equal(parseUgaritVersion("v1.1.2"), null);
+      assert.equal(parseUgaritVersion("v1.0.0"), null);
+      assert.equal(parseUgaritVersion("invalid"), null);
+    });
+
+    test("formatUgaritVersion always formats with 2-digit padding", () => {
+      assert.equal(formatUgaritVersion(1, 0, 0), "v1.00.00");
+      assert.equal(formatUgaritVersion(1, 1, 2), "v1.01.02");
+      assert.equal(formatUgaritVersion(1, 12, 5), "v1.12.05");
+      assert.equal(formatUgaritVersion(2, 0, 0), "v2.00.00");
+    });
+
+    test("classifyCommitBump correctly classifies Conventional Commits", () => {
+      assert.equal(classifyCommitBump("feat: add new gateway endpoint"), "minor");
+      assert.equal(classifyCommitBump("feat(api): support token auth"), "minor");
+
+      assert.equal(classifyCommitBump("fix: repair signature verification"), "patch");
+      assert.equal(classifyCommitBump("chore: bump dependencies"), "patch");
+      assert.equal(classifyCommitBump("test(core): add unit tests"), "patch");
+      assert.equal(classifyCommitBump("style: format with prettier"), "patch");
+      assert.equal(classifyCommitBump("docs: update spec"), "patch");
+
+      // Breaking change triggers major
+      assert.equal(classifyCommitBump("feat!: break public api"), "major");
+      assert.equal(classifyCommitBump("fix!: drop legacy mode"), "major");
+      assert.equal(classifyCommitBump("feat: redesign", "BREAKING CHANGE: removed v1 api"), "major");
+    });
+
+    test("computeNextTag enforces zeroing rules on minor and major bumps", () => {
+      // 1. Minor bump from feat resets patch to 00
+      assert.equal(computeNextTag("v1.01.04", "feat(gateway): add proxy"), "v1.02.00");
+      assert.equal(computeNextTag("v1.04.04", "feat: new capability"), "v1.05.00");
+
+      // 2. Patch bump increments patch by 1
+      assert.equal(computeNextTag("v1.02.00", "fix(gateway): repair null check"), "v1.02.01");
+      assert.equal(computeNextTag("v1.02.01", "chore(deps): update lockfile"), "v1.02.02");
+
+      // 3. Major bump from breaking change resets both minor and patch to 00
+      assert.equal(computeNextTag("v1.05.04", "feat!: complete engine rewrite"), "v2.00.00");
+      assert.equal(computeNextTag("v1.05.04", "fix: refactor", "BREAKING CHANGE: new contract"), "v2.00.00");
+    });
+
+    test("auditRepositoryTags identifies non-compliant tags for pruning", () => {
+      const res = auditRepositoryTags();
+      assert.ok(Array.isArray(res.compliant));
+      assert.ok(Array.isArray(res.nonCompliant));
+      assert.ok(Array.isArray(res.special));
     });
   });
 });

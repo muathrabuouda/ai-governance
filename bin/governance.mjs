@@ -49,6 +49,14 @@ import {
   installAgentPreCommitHook,
 } from "../scripts/agent-control.mjs";
 import { interceptShellCommand, executeAgentAction, getAgentExecutionHistory } from "../scripts/gateway.mjs";
+import {
+  computeNextTag,
+  auditRepositoryTags,
+  createSignedUgaritTag,
+  pruneLegacyTags,
+  getAllGitTags,
+  parseUgaritVersion,
+} from "../scripts/tag-manager.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -700,6 +708,105 @@ const COMMANDS = {
   "audit:git": {
     description: "Audit git commits against Conventional Commits standards",
     action: () => runScript("scripts/audit-git.mjs", [process.cwd(), ...args]),
+  },
+  "tag:next": {
+    description: "Compute next semantic version tag based on HEAD commit message: governance tag:next",
+    action: () => {
+      const gitLog = spawnSync("git", ["log", "-1", "--pretty=format:%s%n%b"], {
+        encoding: "utf8",
+        cwd: process.cwd(),
+      });
+      const lines = gitLog.stdout.split("\n");
+      const subject = lines[0] || "chore: update";
+      const body = lines.slice(1).join("\n");
+
+      // Find latest valid tag
+      const allTags = getAllGitTags(process.cwd());
+      const validTags = allTags
+        .map((t) => parseUgaritVersion(t))
+        .filter(Boolean)
+        .sort((a, b) => a.major - b.major || a.minor - b.minor || a.patch - b.patch);
+
+      const latestTag = validTags.length > 0 ? validTags[validTags.length - 1].raw : "v1.00.00";
+      const nextTag = computeNextTag(latestTag, subject, body);
+      console.log(`\n================================================================`);
+      console.log(`   UGARIT TAGGING ENGINE (xx.xx.xx Standard)`);
+      console.log(`================================================================`);
+      console.log(`Latest Tag:     ${latestTag}`);
+      console.log(`HEAD Commit:    ${subject}`);
+      console.log(`Next Version:   ${nextTag}`);
+      console.log(`================================================================\n`);
+    },
+  },
+  "tag:bump": {
+    description:
+      "Create GPG-signed tag on HEAD according to Conventional Commit semantics: governance tag:bump [--force]",
+    action: () => {
+      const gitLog = spawnSync("git", ["log", "-1", "--pretty=format:%H%n%s%n%b"], {
+        encoding: "utf8",
+        cwd: process.cwd(),
+      });
+      const lines = gitLog.stdout.split("\n");
+      const commitSha = lines[0];
+      const subject = lines[1] || "chore: update";
+      const body = lines.slice(2).join("\n");
+
+      const allTags = getAllGitTags(process.cwd());
+      const validTags = allTags
+        .map((t) => parseUgaritVersion(t))
+        .filter(Boolean)
+        .sort((a, b) => a.major - b.major || a.minor - b.minor || a.patch - b.patch);
+
+      const latestTag = validTags.length > 0 ? validTags[validTags.length - 1].raw : "v1.00.00";
+      const nextTag = computeNextTag(latestTag, subject, body);
+
+      console.log(`[TAGGING] Bumping version from ${latestTag} to ${nextTag}...`);
+      const res = createSignedUgaritTag(nextTag, commitSha, `Release ${nextTag}: ${subject}`, process.cwd());
+      if (res.success) {
+        console.log(
+          `[PASS] Created cryptographically signed tag ${nextTag} on commit ${commitSha.slice(0, 10)}`,
+        );
+      } else {
+        console.error(`[FAIL] Tagging failed: ${res.error}`);
+        process.exit(1);
+      }
+    },
+  },
+  "tag:audit": {
+    description: "Audit repository tags for compliance with Ugarit xx.xx.xx standard: governance tag:audit",
+    action: () => {
+      const res = auditRepositoryTags(process.cwd());
+      console.log(`\n================================================================`);
+      console.log(`   UGARIT TAG COMPLIANCE AUDIT`);
+      console.log(`================================================================`);
+      console.log(`Compliant Tags (${res.compliant.length}):`);
+      for (const t of res.compliant) {
+        console.log(`  [PASS] ${t}`);
+      }
+      if (res.nonCompliant.length > 0) {
+        console.log(`\nNon-Compliant Legacy Tags (${res.nonCompliant.length}):`);
+        for (const t of res.nonCompliant) {
+          console.log(`  [FAIL] ${t} (violates xx.xx.xx two-digit standard)`);
+        }
+        console.log(`\nRun 'governance tag:prune-legacy' to purge non-compliant tags.\n`);
+      } else {
+        console.log(`\n[PASS] All repository tags comply with the xx.xx.xx standard!\n`);
+      }
+      console.log(`================================================================\n`);
+    },
+  },
+  "tag:prune-legacy": {
+    description: "Prune non-compliant legacy tags from local repository: governance tag:prune-legacy",
+    action: () => {
+      const res = pruneLegacyTags(process.cwd());
+      if (res.deleted.length === 0) {
+        console.log(`[INFO] No non-compliant tags found to prune.`);
+      } else {
+        console.log(
+          `[PASS] Pruned ${res.deleted.length} legacy non-compliant tag(s): ${res.deleted.join(", ")}`,
+        );
+      }
+    },
   },
   "audit:design": {
     description: "Audit UI templates for Design System rules (palette, 70-20-10, no green bg)",
