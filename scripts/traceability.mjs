@@ -392,11 +392,18 @@ export function buildTraceabilityMatrix(projectRoot = process.cwd(), options = {
           status = "APPROVED";
         }
       } else {
-        // Fallback when no test report executed
-        if (criteriaCount > 0 && referencedCriteria.length === criteriaCount && implementations.length > 0) {
-          status = boundCriteria.length === criteriaCount ? "VERIFIED" : "REFERENCED";
+        // When no test report has executed, verification cannot be claimed.
+        // Static traceability can only establish BOUND or REFERENCED status.
+        if (criteriaCount > 0 && boundCriteria.length === criteriaCount && implementations.length > 0) {
+          status = "BOUND";
+        } else if (
+          criteriaCount > 0 &&
+          referencedCriteria.length === criteriaCount &&
+          implementations.length > 0
+        ) {
+          status = "REFERENCED";
         } else if (tests.length > 0 && implementations.length > 0) {
-          status = "PARTIALLY_VERIFIED";
+          status = "PARTIALLY_BOUND";
         } else if (implementations.length > 0) {
           status = "IMPLEMENTED";
         } else {
@@ -417,14 +424,13 @@ export function buildTraceabilityMatrix(projectRoot = process.cwd(), options = {
       boundCoveragePercent,
       lifecycleCoveragePercent,
       fullyBound: criteriaCount > 0 && boundCriteria.length === criteriaCount,
+      fullyReferenced: criteriaCount > 0 && referencedCriteria.length === criteriaCount,
       fullyPassed: criteriaCount > 0 && passedCriteria.length === criteriaCount,
       // Backward-compatible alias fields:
       coveragePercent: refCoveragePercent,
+      // Strict Semantic Verification: fullyVerified requires executed passing tests for ALL criteria
       fullyVerified:
-        criteriaCount > 0 &&
-        (testExecutions.length > 0
-          ? passedCriteria.length === criteriaCount
-          : referencedCriteria.length === criteriaCount),
+        criteriaCount > 0 && testExecutions.length > 0 && passedCriteria.length === criteriaCount,
     };
 
     matrix[storyNum] = {
