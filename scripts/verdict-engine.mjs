@@ -9,7 +9,7 @@
 
 import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { GateStatus } from "./policy-engine.mjs";
 import { getGitAttestation, isKeyFingerprintAuthorized, loadGovernanceState } from "./state-guardian.mjs";
@@ -167,6 +167,10 @@ export function generateVerdict({ gateResults, policy, stacks, startTime }, proj
   writeFileSync(verdictPath, JSON.stringify(verdict, null, 2), "utf8");
 
   // Step 2: Post-write verification - check whether any existing detached signature matches the new file
+  // Step 2: Detached Evidence Signature Evaluation
+  // If verdict.json is regenerated, any detached signature must be validated against the NEW file content.
+  // If the signature is missing or does not match this regenerated verdict, mark as unsigned/pending_signature
+  // cleanly without corrupting report with raw failure traces.
   if (existsSync(sigAscPath)) {
     const sigVerification = verifyEvidenceSignature(projectRoot);
     if (sigVerification.verified) {
@@ -180,16 +184,35 @@ export function generateVerdict({ gateResults, policy, stacks, startTime }, proj
       };
       writeFileSync(verdictPath, JSON.stringify(verdict, null, 2), "utf8");
     } else {
+      // Signature exists but is stale or invalid for the newly generated verdict file.
+      // Remove the stale .asc file to maintain fail-closed integrity until signed again.
+      try {
+        unlinkSync(sigAscPath);
+      } catch {
+        // Ignore unlink error
+      }
       verdict.evidenceAttestation = {
         signed: false,
-        type: "stale-signature",
-        signatureFile: "verdict.json.asc",
+        type: "pending_signature",
+        signatureFile: null,
         verified: false,
-        signerKey: sigVerification.signerKey || null,
-        description: `Stale detached GPG signature does not match regenerated verdict: ${sigVerification.error}. Run 'governance evidence:sign' to re-sign current verdict.`,
+        signerKey: null,
+        description:
+          "Unsigned (New verdict generated. Run 'governance evidence:sign' to cryptographically attest)",
       };
       writeFileSync(verdictPath, JSON.stringify(verdict, null, 2), "utf8");
     }
+  } else {
+    verdict.evidenceAttestation = {
+      signed: false,
+      type: "content_digest_only",
+      signatureFile: null,
+      verified: false,
+      signerKey: null,
+      description:
+        "Content digest only (SHA-256). Run 'governance evidence:sign' for GPG detached attestation",
+    };
+    writeFileSync(verdictPath, JSON.stringify(verdict, null, 2), "utf8");
   }
 
   // Step 3: Generate Human-Readable Markdown Report
@@ -418,9 +441,34 @@ export function signVerdict(projectRoot = process.cwd(), options = {}) {
       },
     );
 
+    // Verify newly created signature and update report.md with real-time attestation
+    const sigVerification = verifyEvidenceSignature(projectRoot);
+    if (sigVerification.verified) {
+      try {
+        const rawVerdict = JSON.parse(readFileSync(verdictPath, "utf8"));
+        const reportPath = resolve(evidenceDir, "report.md");
+        const updatedVerdict = {
+          ...rawVerdict,
+          evidenceAttestation: {
+            signed: true,
+            type: "detached-gpg",
+            signatureFile: "verdict.json.asc",
+            verified: true,
+            signerKey: sigVerification.signerKey,
+            description: `Cryptographically verified via detached GPG signature (key: ${sigVerification.signerKey})`,
+          },
+        };
+        const updatedReport = generateReportMarkdown(updatedVerdict);
+        writeFileSync(reportPath, updatedReport, "utf8");
+      } catch {
+        // Report update fallback
+      }
+    }
+
     return {
       signed: true,
       signaturePath: sigPath,
+      signerKey: sigVerification.signerKey || null,
       error: null,
     };
   } catch (err) {

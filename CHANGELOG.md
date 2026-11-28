@@ -5,6 +5,31 @@ All notable changes to `@muathrabuouda/ai-governance` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.02.01](https://github.com/muathrabuouda/ai-governance/releases/tag/v1.02.01) - 2026-11-28
+
+### Added
+
+- Deep command inspection in Execution Gateway blocking inline evaluation (`node -e`, `python -c`) and destructive git subcommands (`git checkout --`, `git restore`, `git clean -f`).
+- Per-file gateway enforcement in `verifyGatewayEnforcement()` validating working tree files against execution records.
+- Fail-closed gateway violation auditing in `auditAgentChanges()` rejecting unlogged file modifications in strict mode.
+- Synchronous attestation updates in `signVerdict()` regenerating `report.md` with verified detached GPG signatures.
+
+### Fixed
+
+- Dynamic version resolution in `governance --version` reading directly from `package.json`.
+- Prevention of stale detached GPG signature errors in verification report (`report.md`) by unlinking obsolete `.asc` files on regenerated verdicts.
+- Harmonized Ugarit Tagging & Versioning standard (`xx.xx.xx`) documentation.
+
+## [v1.02.00](https://github.com/muathrabuouda/ai-governance/releases/tag/v1.02.00) - 2026-11-28
+
+### Added
+
+- Automated Ugarit Tagging Engine (`scripts/tag-manager.mjs`) implementing the ecosystem versioning standard `v[MAJOR].[MINOR].[PATCH]` (`xx.xx.xx`).
+- Tagging CLI commands in `bin/governance.mjs`: `tag:next`, `tag:bump`, `tag:audit`, and `tag:prune-legacy`.
+- Strict semantic version bumping rules resetting patch to `00` on minor upgrades and both to `00` on major upgrades.
+- Cryptographically signed git tag creation via `git tag -s` with automatic GPG executable detection.
+- Complete documentation in `docs/standards/git-workflow.md` specifying commit classification, zeroing rules, and remote synchronization.
+
 ## [v1.01.02](https://github.com/muathrabuouda/ai-governance/releases/tag/v1.01.02) - 2026-11-28
 
 ### Added

@@ -60,6 +60,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
+const pkg = JSON.parse(readFileSync(resolve(rootDir, "package.json"), "utf8"));
 
 const [, , command, ...args] = process.argv;
 
@@ -966,7 +967,7 @@ if (!command || command === "--help" || command === "-h") {
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("Governance Engine v1.00.00");
+  console.log(`Governance Engine v${pkg.version}`);
   process.exit(0);
 }
 
