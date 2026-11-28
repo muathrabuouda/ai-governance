@@ -1343,8 +1343,8 @@ test("Story 1 [AC-1.2] invalid actor denied", () => {});
         const evidenceDir = join(tempDir, ".governance", "evidence");
         mkdirSync(evidenceDir, { recursive: true });
 
-        // Place a mock detached signature on disk
-        writeFileSync(join(evidenceDir, "verdict.json.asc"), "-----BEGIN PGP SIGNATURE-----\nfake\n", "utf8");
+        const sigPath = join(evidenceDir, "verdict.json.asc");
+        writeFileSync(sigPath, "-----BEGIN PGP SIGNATURE-----\nfake\n", "utf8");
         writeFileSync(
           join(tempDir, ".governance", "authorized-approvers.json"),
           JSON.stringify({ allowedKeyFingerprints: ["ABCDEF1234567890"] }),
@@ -1362,11 +1362,12 @@ test("Story 1 [AC-1.2] invalid actor denied", () => {});
         );
 
         assert.ok(v);
-        // Stale signature must be marked as unverified and stale-signature
+        // Stale signature must be purged to maintain fail-closed integrity
         assert.equal(v.evidenceAttestation.signed, false);
         assert.equal(v.evidenceAttestation.verified, false);
-        assert.equal(v.evidenceAttestation.type, "stale-signature");
-        assert.match(v.evidenceAttestation.description, /Stale detached GPG signature/);
+        assert.equal(v.evidenceAttestation.type, "pending_signature");
+        assert.match(v.evidenceAttestation.description, /New verdict generated/);
+        assert.equal(existsSync(sigPath), false);
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
@@ -1436,6 +1437,30 @@ test("Story 1 [AC-1.2] invalid actor denied", () => {});
       assert.ok(Array.isArray(res.compliant));
       assert.ok(Array.isArray(res.nonCompliant));
       assert.ok(Array.isArray(res.special));
+    });
+
+    test("canAgentExecuteAction blocks inline code evaluation and destructive git operations", () => {
+      // 1. Inline code evaluation blocked
+      const evalNode = canAgentExecuteAction("exec", "node", { command: "node -e 'process.exit(0)'" });
+      assert.equal(evalNode.allowed, false);
+      assert.equal(evalNode.rule, "forbiddenActions:inlineCodeEvaluation");
+
+      const evalPython = canAgentExecuteAction("exec", "python", { command: "python -c 'import os'" });
+      assert.equal(evalPython.allowed, false);
+      assert.equal(evalPython.rule, "forbiddenActions:inlineCodeEvaluation");
+
+      // 2. Destructive git checkout / restore / clean blocked
+      const gitCheckout = canAgentExecuteAction("exec", "git", { command: "git checkout -- package.json" });
+      assert.equal(gitCheckout.allowed, false);
+      assert.equal(gitCheckout.rule, "forbiddenActions:destructiveGit");
+
+      const gitRestore = canAgentExecuteAction("exec", "git", { command: "git restore ." });
+      assert.equal(gitRestore.allowed, false);
+      assert.equal(gitRestore.rule, "forbiddenActions:destructiveGit");
+
+      const gitClean = canAgentExecuteAction("exec", "git", { command: "git clean -fd" });
+      assert.equal(gitClean.allowed, false);
+      assert.equal(gitClean.rule, "forbiddenActions:destructiveGit");
     });
   });
 });

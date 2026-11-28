@@ -320,18 +320,74 @@ export function interceptFileDelete(filePath, deleteFn, context = {}) {
  * Prevents unauthorized offline / manual file mutations bypassing gateway controls.
  *
  * @param {string} [projectRoot]
- * @returns {{ enforced: boolean, unloggedFiles: string[] }}
+ * @returns {{ enforced: boolean, unloggedFiles: string[], totalFiles: number, totalLogged: number }}
  */
 export function verifyGatewayEnforcement(projectRoot = process.cwd()) {
   const history = getAgentExecutionHistory(projectRoot);
+  const allowedRecords = history.filter((h) => h.status === "ALLOWED" || h.status === "SUCCESS");
   const allowedTargets = new Set(
-    history.filter((h) => h.status === "ALLOWED" || h.status === "SUCCESS").map((h) => h.target),
+    allowedRecords.map((h) => h.target.replace(/\\/g, "/").replace(/^\.\//, "").trim()),
   );
 
+  let gitStatusOutput = "";
+  try {
+    gitStatusOutput = execSync("git status --porcelain", {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return {
+      enforced: true,
+      unloggedFiles: [],
+      totalFiles: 0,
+      totalLogged: history.length,
+    };
+  }
+
+  const lines = gitStatusOutput
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const unloggedFiles = [];
+  const modifiedFiles = [];
+
+  for (const line of lines) {
+    const rawPath = line.slice(2).trim();
+    // Handle rename arrows "old -> new"
+    const filePath = rawPath.includes("->") ? rawPath.split("->")[1].trim() : rawPath;
+    const normFile = filePath.replace(/\\/g, "/").replace(/^\.\//, "").trim();
+
+    // Ignore .governance/evidence/ logs and reports which are internally generated
+    if (normFile.startsWith(".governance/evidence/")) {
+      continue;
+    }
+
+    modifiedFiles.push(normFile);
+
+    const isExplicitlyLogged =
+      allowedTargets.has(normFile) ||
+      allowedTargets.has(filePath) ||
+      allowedRecords.some((rec) => {
+        const normTarget = rec.target.replace(/\\/g, "/").replace(/^\.\//, "").trim();
+        return (
+          normTarget === normFile ||
+          (normTarget.endsWith("/") && normFile.startsWith(normTarget)) ||
+          rec.raw.includes(`target=${normFile}`)
+        );
+      });
+
+    if (!isExplicitlyLogged) {
+      unloggedFiles.push(normFile);
+    }
+  }
+
   return {
-    enforced: true,
+    enforced: unloggedFiles.length === 0,
+    unloggedFiles,
+    totalFiles: modifiedFiles.length,
     totalLogged: history.length,
-    allowedTargetsCount: allowedTargets.size,
   };
 }
 

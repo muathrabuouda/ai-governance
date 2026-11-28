@@ -253,20 +253,39 @@ export function auditAgentChanges(projectRoot = process.cwd(), _options = {}) {
     if (contract.enforceGateway && (statusCode === "M" || statusCode === "A" || statusCode === "??")) {
       const logFile = resolve(projectRoot, ".governance", "evidence", "agent-execution.log");
       let isLogged = false;
-      if (existsSync(logFile)) {
+      const normFile = normalizeRelPath(filePath);
+
+      // System evidence and reports generated during verification are permitted
+      if (normFile.startsWith(".governance/evidence/")) {
+        isLogged = true;
+      } else if (existsSync(logFile)) {
         try {
           const logContent = readFileSync(logFile, "utf8");
-          const normFile = normalizeRelPath(filePath);
-          isLogged =
-            logContent.includes(`target=${normFile}`) ||
-            logContent.includes(`target=${filePath}`) ||
-            logContent.includes("status=ALLOWED") ||
-            logContent.includes("action=shell_exec");
+          // Check for explicit per-file target logging with ALLOWED or SUCCESS status
+          const hasFileTarget =
+            logContent.includes(`target=${normFile}`) || logContent.includes(`target=${filePath}`);
+          if (hasFileTarget) {
+            // Verify that the record for this target is ALLOWED or SUCCESS
+            const lines = logContent.split("\n");
+            for (const logLine of lines) {
+              if (
+                (logLine.includes(`target=${normFile}`) || logLine.includes(`target=${filePath}`)) &&
+                (logLine.includes("[ALLOWED]") || logLine.includes("[SUCCESS]"))
+              ) {
+                isLogged = true;
+                break;
+              }
+            }
+          }
         } catch {
           // Unreadable log
         }
       }
       if (!isLogged && contract.strictMode) {
+        violations.push(
+          `[GATEWAY VIOLATION] Modification to "${filePath}" was performed without an authorized gateway record. Direct changes outside 'governance exec' are prohibited in strict mode.`,
+        );
+      } else if (!isLogged) {
         warnings.push(
           `[GATEWAY NOTICE] Modification to "${filePath}" was performed without recorded gateway action. Ensure modifications route through 'governance exec'.`,
         );
@@ -419,7 +438,7 @@ export function canAgentExecuteAction(action, targetPath, context = {}) {
       }
     }
 
-    // 5b. Destructive Git operations (force push, hard reset, unverified clean)
+    // 5b. Destructive Git operations (force push, hard reset, unverified clean, destructive checkout/restore)
     if (/git\s+push\s+.*(?:--force|-f\b)/i.test(cmd)) {
       return {
         allowed: false,
@@ -432,6 +451,31 @@ export function canAgentExecuteAction(action, targetPath, context = {}) {
         allowed: false,
         reason: "Hard git resets destroy uncommitted work and are prohibited for autonomous agents.",
         rule: "forbiddenActions:destructiveGit",
+      };
+    }
+    if (/git\s+clean\s+.*-(?:f|x)/i.test(cmd)) {
+      return {
+        allowed: false,
+        reason: "Untracked file deletion via 'git clean -f' is prohibited for autonomous agents.",
+        rule: "forbiddenActions:destructiveGit",
+      };
+    }
+    if (/(?:git\s+checkout\s+--|git\s+restore)\s+/i.test(cmd)) {
+      return {
+        allowed: false,
+        reason:
+          "Discarding file changes via 'git checkout --' or 'git restore' is prohibited for autonomous agents.",
+        rule: "forbiddenActions:destructiveGit",
+      };
+    }
+
+    // 5c. Inline script execution bypassing static code analysis and hooks
+    if (/(?:node|python|perl|ruby|bash|sh|zsh|powershell|pwsh)\s+(?:-e|--eval|-c)\b/i.test(cmd)) {
+      return {
+        allowed: false,
+        reason:
+          "Inline code evaluation (-e / --eval / -c) is strictly prohibited as it bypasses static governance analysis.",
+        rule: "forbiddenActions:inlineCodeEvaluation",
       };
     }
 
