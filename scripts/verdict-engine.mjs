@@ -8,10 +8,11 @@
  */
 
 import { createHash } from "node:crypto";
+import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { GateStatus } from "./policy-engine.mjs";
-import { getGitAttestation, loadGovernanceState } from "./state-guardian.mjs";
+import { getGitAttestation, isKeyFingerprintAuthorized, loadGovernanceState } from "./state-guardian.mjs";
 
 /**
  * Returns path to .governance/evidence directory in target project.
@@ -47,10 +48,7 @@ export function hashData(data) {
  * @param {string} [projectRoot]
  * @returns {object} The complete verdict payload
  */
-export function generateVerdict(
-  { gateResults, policy, stacks, startTime },
-  projectRoot = process.cwd(),
-) {
+export function generateVerdict({ gateResults, policy, stacks, startTime }, projectRoot = process.cwd()) {
   const endTime = Date.now();
   const durationMs = endTime - (startTime || endTime);
   const gitMeta = getGitAttestation(projectRoot);
@@ -58,7 +56,9 @@ export function generateVerdict(
 
   const failedGates = gateResults.filter((g) => !g.passed && g.blocking);
   const warningGates = gateResults.filter(
-    (g) => g.status === GateStatus.REQUIRES_REVIEW || (g.passed && g.status === GateStatus.SKIPPED && g.message?.includes("[WARN]")),
+    (g) =>
+      g.status === GateStatus.REQUIRES_REVIEW ||
+      (g.passed && g.status === GateStatus.SKIPPED && g.message?.includes("[WARN]")),
   );
 
   let overallVerdict = "APPROVED";
@@ -69,9 +69,10 @@ export function generateVerdict(
     summaryReason = `${failedGates.length} required verification gate(s) failed: ${failedGates.map((g) => g.name || g.key).join(", ")}`;
   } else if (warningGates.length > 0 || policy.profile === "lenient") {
     overallVerdict = "REQUIRES_REVIEW";
-    summaryReason = warningGates.length > 0
-      ? `${warningGates.length} gate(s) completed with warnings or require review: ${warningGates.map((g) => g.name || g.key).join(", ")}`
-      : "Executed under lenient policy profile";
+    summaryReason =
+      warningGates.length > 0
+        ? `${warningGates.length} gate(s) completed with warnings or require review: ${warningGates.map((g) => g.name || g.key).join(", ")}`
+        : "Executed under lenient policy profile";
   }
 
   const rawVerdict = {
@@ -116,10 +117,10 @@ export function generateVerdict(
     })),
   };
 
-  // Check if a detached GPG signature already exists for the evidence artifact
+  // Verify genuine detached GPG signature on evidence artifact if present
   const evidenceDir = getEvidenceDir(projectRoot);
   const sigAscPath = resolve(evidenceDir, "verdict.json.asc");
-  const hasDetachedSignature = existsSync(sigAscPath);
+  const sigVerification = verifyEvidenceSignature(projectRoot);
 
   // Generate cryptographic content digest of verdict payload
   const digestValue = hashData(rawVerdict);
@@ -141,13 +142,20 @@ export function generateVerdict(
       verified: gitMeta.signatureStatus === "G",
     },
     evidenceAttestation: {
-      signed: hasDetachedSignature,
-      type: hasDetachedSignature ? "detached-gpg" : "content_digest_only",
-      signatureFile: hasDetachedSignature ? "verdict.json.asc" : null,
-      verified: hasDetachedSignature,
-      description: hasDetachedSignature
-        ? "Cryptographically signed via detached GPG signature (verdict.json.asc)"
-        : "Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest)",
+      signed: sigVerification.verified,
+      type: sigVerification.verified
+        ? "detached-gpg"
+        : existsSync(sigAscPath)
+          ? "invalid-signature"
+          : "content_digest_only",
+      signatureFile: existsSync(sigAscPath) ? "verdict.json.asc" : null,
+      verified: sigVerification.verified,
+      signerKey: sigVerification.signerKey || null,
+      description: sigVerification.verified
+        ? `Cryptographically verified via detached GPG signature (key: ${sigVerification.signerKey})`
+        : existsSync(sigAscPath)
+          ? `GPG Signature verification failed: ${sigVerification.error}`
+          : "Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest)",
     },
     // Retained for backward-compatible consumption
     digitalProof: {
@@ -327,6 +335,35 @@ export function formatVerdictTerminal(verdict) {
 }
 
 /**
+ * Resolves the GPG executable path using Git configuration, system PATH, or standard binary locations.
+ * @param {string} [projectRoot]
+ * @returns {string}
+ */
+export function resolveGpgBinary(projectRoot = process.cwd()) {
+  try {
+    const gitGpg = execSync("git config gpg.program", {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (gitGpg && existsSync(gitGpg)) return `"${gitGpg}"`;
+  } catch {
+    // Continue search
+  }
+
+  const commonPaths = [
+    "C:\\Program Files\\Git\\usr\\bin\\gpg.exe",
+    "C:\\Program Files (x86)\\GnuPG\\bin\\gpg.exe",
+    "C:\\Program Files\\GnuPG\\bin\\gpg.exe",
+  ];
+  for (const p of commonPaths) {
+    if (existsSync(p)) return `"${p}"`;
+  }
+
+  return "gpg";
+}
+
+/**
  * Cryptographically signs a verdict file using GPG detached signature.
  * @param {string} [projectRoot]
  * @param {{ keyId?: string }} [options]
@@ -340,13 +377,29 @@ export function signVerdict(projectRoot = process.cwd(), options = {}) {
   }
 
   const sigPath = resolve(evidenceDir, "verdict.json.asc");
-  const keyArg = options.keyId ? `-u "${options.keyId}"` : "";
+  let targetKey = options.keyId;
+  if (!targetKey) {
+    try {
+      targetKey = execSync("git config user.signingkey", {
+        cwd: projectRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch {
+      targetKey = "";
+    }
+  }
+  const keyArg = targetKey ? `-u "${targetKey}"` : "";
+  const gpgBin = resolveGpgBinary(projectRoot);
 
   try {
-    execSync(`gpg --batch --yes --armor --detach-sign ${keyArg} --output "${sigPath}" "${verdictPath}"`, {
-      cwd: projectRoot,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
+    execSync(
+      `${gpgBin} --batch --yes --armor --detach-sign ${keyArg} --output "${sigPath}" "${verdictPath}"`,
+      {
+        cwd: projectRoot,
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    );
 
     return {
       signed: true,
@@ -358,6 +411,90 @@ export function signVerdict(projectRoot = process.cwd(), options = {}) {
       signed: false,
       signaturePath: null,
       error: err.message,
+    };
+  }
+}
+
+/**
+ * Cryptographically verifies a detached GPG signature on verdict.json.
+ * Validates GPG status, checks signature authenticity, and ensures the signer's
+ * key fingerprint is authorized in .governance/authorized-approvers.json.
+ *
+ * @param {string} [projectRoot]
+ * @returns {{ verified: boolean, signerName: string|null, signerKey: string|null, error: string|null }}
+ */
+export function verifyEvidenceSignature(projectRoot = process.cwd()) {
+  const evidenceDir = getEvidenceDir(projectRoot);
+  const verdictPath = resolve(evidenceDir, "verdict.json");
+  const sigAscPath = resolve(evidenceDir, "verdict.json.asc");
+
+  if (!existsSync(verdictPath) || !existsSync(sigAscPath)) {
+    return {
+      verified: false,
+      signerName: null,
+      signerKey: null,
+      error: !existsSync(sigAscPath) ? "detached_signature_missing" : "verdict_file_missing",
+    };
+  }
+
+  // Load authorized approvers whitelist
+  const authFile = resolve(projectRoot, ".governance", "authorized-approvers.json");
+  let allowedKeys = [];
+  if (existsSync(authFile)) {
+    try {
+      const authData = JSON.parse(readFileSync(authFile, "utf8"));
+      allowedKeys = authData.allowedKeyFingerprints || [];
+    } catch {
+      // Failed to parse approvers
+    }
+  }
+
+  try {
+    const gpgBin = resolveGpgBinary(projectRoot);
+    const output = execSync(`${gpgBin} --batch --status-fd 1 --verify "${sigAscPath}" "${verdictPath}"`, {
+      cwd: projectRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
+    });
+
+    const isGoodSig = output.includes("[GNUPG:] GOODSIG");
+    const validSigMatch = output.match(/\[GNUPG:\]\s+VALIDSIG\s+([A-Fa-f0-9]+)/);
+    const signerFingerprint = validSigMatch ? validSigMatch[1] : null;
+
+    if (!isGoodSig || !signerFingerprint) {
+      return {
+        verified: false,
+        signerName: null,
+        signerKey: signerFingerprint,
+        error: "invalid_cryptographic_signature",
+      };
+    }
+
+    // Check against authorized approvers whitelist
+    const isAuthorized =
+      allowedKeys.length === 0 || isKeyFingerprintAuthorized({ signerFingerprint }, allowedKeys);
+
+    if (!isAuthorized) {
+      return {
+        verified: false,
+        signerName: null,
+        signerKey: signerFingerprint,
+        error: `unauthorized_signing_key: ${signerFingerprint}`,
+      };
+    }
+
+    return {
+      verified: true,
+      signerName: null,
+      signerKey: signerFingerprint,
+      error: null,
+    };
+  } catch (err) {
+    return {
+      verified: false,
+      signerName: null,
+      signerKey: null,
+      error: `gpg_verification_failed: ${err.message}`,
     };
   }
 }
