@@ -49,11 +49,6 @@ import {
   installAgentPreCommitHook,
 } from "../scripts/agent-control.mjs";
 import { interceptShellCommand, executeAgentAction, getAgentExecutionHistory } from "../scripts/gateway.mjs";
-import {
-  interceptShellCommand,
-  executeAgentAction,
-  getAgentExecutionHistory,
-} from "../scripts/gateway.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
