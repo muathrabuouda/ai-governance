@@ -31,7 +31,6 @@ import {
   approveSpec,
   rebaselineSpec,
   deprecateStory,
-  lockCriteria,
   resolveStrictEnforcement,
 } from "../scripts/state-guardian.mjs";
 import { loadPolicy, evaluateGate, GateStatus } from "../scripts/policy-engine.mjs";
@@ -49,6 +48,12 @@ import {
   canAgentExecuteAction,
   installAgentPreCommitHook,
 } from "../scripts/agent-control.mjs";
+import { interceptShellCommand, executeAgentAction, getAgentExecutionHistory } from "../scripts/gateway.mjs";
+import {
+  interceptShellCommand,
+  executeAgentAction,
+  getAgentExecutionHistory,
+} from "../scripts/gateway.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -112,7 +117,8 @@ const COMMANDS = {
     action: () => generateAgentRules(),
   },
   "approve:spec": {
-    description: "Formally approve and lock Acceptance Criteria: governance approve:spec [signer-name] [--prune] [--actor=<name>]",
+    description:
+      "Formally approve and lock Acceptance Criteria: governance approve:spec [signer-name] [--prune] [--actor=<name>]",
     action: () => {
       const isPrune = args.includes("--prune");
       const actorFlag = args.find((a) => a.startsWith("--actor="));
@@ -123,12 +129,15 @@ const COMMANDS = {
     },
   },
   "spec:rebaseline": {
-    description: "Establish a migration baseline anchor for historical specification locks: governance spec:rebaseline [reason] [--author=<name>]",
+    description:
+      "Establish a migration baseline anchor for historical specification locks: governance spec:rebaseline [reason] [--author=<name>]",
     action: () => {
       const authorFlag = args.find((a) => a.startsWith("--author="));
       const author = authorFlag ? authorFlag.replace("--author=", "").trim() : undefined;
       const filtered = args.filter((a) => !a.startsWith("--author="));
-      const reason = filtered.join(" ") || "Migration baseline: establishing cryptographic root of trust for legacy blocks";
+      const reason =
+        filtered.join(" ") ||
+        "Migration baseline: establishing cryptographic root of trust for legacy blocks";
       rebaselineSpec(author, reason, {}, process.cwd());
     },
   },
@@ -138,7 +147,9 @@ const COMMANDS = {
       const authorFlag = args.find((a) => a.startsWith("--author="));
       const author = authorFlag ? authorFlag.replace("--author=", "").trim() : undefined;
       const filtered = args.filter((a) => !a.startsWith("--author="));
-      const reason = filtered.join(" ") || "Migration baseline: establishing cryptographic root of trust for legacy blocks";
+      const reason =
+        filtered.join(" ") ||
+        "Migration baseline: establishing cryptographic root of trust for legacy blocks";
       rebaselineSpec(author, reason, {}, process.cwd());
     },
   },
@@ -154,7 +165,8 @@ const COMMANDS = {
     },
   },
   "deprecate:story": {
-    description: "Formally deprecate an existing story: governance deprecate:story <number> [reason] [--author=<name>] [--superseded-by=<id>]",
+    description:
+      "Formally deprecate an existing story: governance deprecate:story <number> [reason] [--author=<name>] [--superseded-by=<id>]",
     action: () => {
       const filtered = args.filter((a) => !a.startsWith("--author=") && !a.startsWith("--superseded-by="));
       const [storyNum, ...reasonParts] = filtered;
@@ -163,7 +175,9 @@ const COMMANDS = {
       const author = authorFlag ? authorFlag.replace("--author=", "") : "Engineer";
       const supersededBy = supersededFlag ? supersededFlag.replace("--superseded-by=", "") : null;
       if (!storyNum) {
-        console.error("Usage: governance deprecate:story <number> [reason] [--author=<name>] [--superseded-by=<id>]");
+        console.error(
+          "Usage: governance deprecate:story <number> [reason] [--author=<name>] [--superseded-by=<id>]",
+        );
         process.exit(1);
       }
       deprecateStory(storyNum, reasonParts.join(" ") || "Deprecated by engineer", author, process.cwd(), {
@@ -185,7 +199,8 @@ const COMMANDS = {
 
   // Verification & Engineering Gates
   check: {
-    description: "Run complete policy-driven verification pipeline across all detected project stacks: governance check [--profile=strict|standard|lenient]",
+    description:
+      "Run complete policy-driven verification pipeline across all detected project stacks: governance check [--profile=strict|standard|lenient]",
     action: () => {
       console.log(`\n================================================================`);
       console.log(`   GOVERNANCE VERIFICATION PIPELINE`);
@@ -212,7 +227,11 @@ const COMMANDS = {
       // 1. Acceptance Criteria Integrity Gate (Spec Lock)
       console.log("\n[STAGE 1/9] Verifying Specification & Acceptance Criteria Integrity...");
       const isStrict = resolveStrictEnforcement(process.cwd(), {
-        strict: profileOverride ? profileOverride === "strict" : (policy.profile === "strict" || Boolean(policy.strictKeyEnforcement) ? true : undefined),
+        strict: profileOverride
+          ? profileOverride === "strict"
+          : policy.profile === "strict" || Boolean(policy.strictKeyEnforcement)
+            ? true
+            : undefined,
       });
       const criteriaCheck = verifyCriteriaIntegrity(process.cwd(), { strict: isStrict });
       const g1 = evaluateGate(
@@ -269,14 +288,19 @@ const COMMANDS = {
 
       // 3. Secrets Scan in current project
       console.log("\n[STAGE 3/9] Scanning for secret leaks...");
-      const secretsResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/scan-secrets.mjs"), process.cwd()], {
-        stdio: "inherit",
-      });
+      const secretsResult = spawnSync(
+        process.execPath,
+        [resolve(rootDir, "scripts/scan-secrets.mjs"), process.cwd()],
+        {
+          stdio: "inherit",
+        },
+      );
       const g3 = evaluateGate(
         "secrets",
         {
           status: secretsResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
-          message: secretsResult.status === 0 ? "No secret leaks detected" : "Secrets scan detected potential leaks",
+          message:
+            secretsResult.status === 0 ? "No secret leaks detected" : "Secrets scan detected potential leaks",
         },
         policy,
       );
@@ -290,14 +314,21 @@ const COMMANDS = {
 
       // 4. Dependencies Verification Gate
       console.log("\n[STAGE 4/9] Verifying Dependencies Pinning and Approvals...");
-      const depsResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/check-deps.mjs"), process.cwd()], {
-        stdio: "inherit",
-      });
+      const depsResult = spawnSync(
+        process.execPath,
+        [resolve(rootDir, "scripts/check-deps.mjs"), process.cwd()],
+        {
+          stdio: "inherit",
+        },
+      );
       const g4 = evaluateGate(
         "dependencies",
         {
           status: depsResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
-          message: depsResult.status === 0 ? "All dependencies pinned and verified" : "Dependencies verification failed",
+          message:
+            depsResult.status === 0
+              ? "All dependencies pinned and verified"
+              : "Dependencies verification failed",
         },
         policy,
       );
@@ -311,15 +342,22 @@ const COMMANDS = {
 
       // 5. Audit Git commits
       console.log("\n[STAGE 5/9] Auditing Git commits...");
-      const gitResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-git.mjs"), process.cwd()], {
-        cwd: process.cwd(),
-        stdio: "inherit",
-      });
+      const gitResult = spawnSync(
+        process.execPath,
+        [resolve(rootDir, "scripts/audit-git.mjs"), process.cwd()],
+        {
+          cwd: process.cwd(),
+          stdio: "inherit",
+        },
+      );
       const g5 = evaluateGate(
         "git_audit",
         {
           status: gitResult.status === 0 ? GateStatus.PASSED : GateStatus.FAILED,
-          message: gitResult.status === 0 ? "Git commit conventions and history valid" : "Git commit standards audit failed",
+          message:
+            gitResult.status === 0
+              ? "Git commit conventions and history valid"
+              : "Git commit standards audit failed",
         },
         policy,
       );
@@ -338,7 +376,12 @@ const COMMANDS = {
         if (st.formatCmd) {
           anyFormatRun = true;
           console.log(`\n[STAGE 6/9] Verifying Code Formatting (${st.name})...`);
-          const res = runStage(`Code Formatting (${st.name})`, st.formatCmd.cmd, st.formatCmd.args, process.cwd());
+          const res = runStage(
+            `Code Formatting (${st.name})`,
+            st.formatCmd.cmd,
+            st.formatCmd.args,
+            process.cwd(),
+          );
           const g = evaluateGate("formatting", res, policy);
           lastFormatGate = g;
           if (g.message && !res.passed) {
@@ -374,7 +417,12 @@ const COMMANDS = {
         if (st.lintCmd) {
           anyLintRun = true;
           console.log(`\n[STAGE 7/9] Running Static Analysis & Lint (${st.name})...`);
-          const res = runStage(`Static Analysis (${st.name})`, st.lintCmd.cmd, st.lintCmd.args, process.cwd());
+          const res = runStage(
+            `Static Analysis (${st.name})`,
+            st.lintCmd.cmd,
+            st.lintCmd.args,
+            process.cwd(),
+          );
           const g = evaluateGate("static_analysis", res, policy);
           lastLintGate = g;
           if (g.message && !res.passed) {
@@ -445,9 +493,13 @@ const COMMANDS = {
 
       // 9. Design System Audit (if UI files exist)
       console.log("\n[STAGE 9/9] Auditing UI Design Tokens...");
-      const designResult = spawnSync(process.execPath, [resolve(rootDir, "scripts/audit-design.mjs"), process.cwd()], {
-        stdio: "inherit",
-      });
+      const designResult = spawnSync(
+        process.execPath,
+        [resolve(rootDir, "scripts/audit-design.mjs"), process.cwd()],
+        {
+          stdio: "inherit",
+        },
+      );
 
       let g9Status = GateStatus.PASSED;
       let g9Message = "Design system tokens compliant";
@@ -508,9 +560,13 @@ const COMMANDS = {
     },
   },
   "evidence:sign": {
-    description: "Cryptographically sign verdict.json with GPG private key: governance evidence:sign [--key=<keyId>]",
+    description:
+      "Cryptographically sign verdict.json with GPG private key: governance evidence:sign [--key=<keyId>]",
     action: () => {
-      const keyArg = args.find((a) => a.startsWith("--key="))?.replace("--key=", "").trim();
+      const keyArg = args
+        .find((a) => a.startsWith("--key="))
+        ?.replace("--key=", "")
+        .trim();
       const res = signVerdict(process.cwd(), { keyId: keyArg });
       if (res.signed) {
         console.log(`[PASS] Evidence successfully signed with GPG detached signature: ${res.signaturePath}`);
@@ -539,13 +595,22 @@ const COMMANDS = {
     },
   },
   "agent:check": {
-    description: "Check pre-execution agent permission: governance agent:check --action=<action> --target=<path>",
+    description:
+      "Check pre-execution agent permission: governance agent:check --action=<action> --target=<path>",
     action: () => {
-      const actionArg = args.find((a) => a.startsWith("--action="))?.replace("--action=", "").trim();
-      const targetArg = args.find((a) => a.startsWith("--target="))?.replace("--target=", "").trim();
+      const actionArg = args
+        .find((a) => a.startsWith("--action="))
+        ?.replace("--action=", "")
+        .trim();
+      const targetArg = args
+        .find((a) => a.startsWith("--target="))
+        ?.replace("--target=", "")
+        .trim();
 
       if (!actionArg || !targetArg) {
-        console.error("Usage: governance agent:check --action=<write|modify|delete|add_dependency> --target=<path>");
+        console.error(
+          "Usage: governance agent:check --action=<write|modify|delete|add_dependency> --target=<path>",
+        );
         process.exit(1);
       }
 
@@ -565,6 +630,69 @@ const COMMANDS = {
     action: () => {
       installAgentPreCommitHook(process.cwd());
       console.log(`[PASS] Agent pre-commit hook installed successfully in .git/hooks/pre-commit`);
+    },
+  },
+  exec: {
+    description:
+      "Execute command or action through the Active Execution Gateway: governance exec [--action=<type> --target=<path>] [-- <command>]",
+    action: () => {
+      const sepIndex = process.argv.indexOf("--");
+      const shellCmd = sepIndex !== -1 ? process.argv.slice(sepIndex + 1).join(" ") : null;
+
+      const actionArg = args
+        .find((a) => a.startsWith("--action="))
+        ?.replace("--action=", "")
+        .trim();
+      const targetArg = args
+        .find((a) => a.startsWith("--target="))
+        ?.replace("--target=", "")
+        .trim();
+
+      if (shellCmd) {
+        console.log(`[GATEWAY] Intercepting command execution: "${shellCmd}"...`);
+        const res = interceptShellCommand(shellCmd, { projectRoot: process.cwd() });
+        if (!res.allowed) {
+          console.error(`\n[FAIL] Security Violation: Gateway blocked execution!`);
+          console.error(`       ${res.error}`);
+          process.exit(1);
+        }
+        process.exit(res.exitCode);
+      }
+
+      if (actionArg && targetArg) {
+        const res = executeAgentAction(actionArg, targetArg, null, { projectRoot: process.cwd() });
+        if (!res.allowed) {
+          console.error(`\n[FAIL] Security Violation: Action "${actionArg}" on "${targetArg}" is BLOCKED.`);
+          console.error(`       Reason: ${res.reason}`);
+          process.exit(1);
+        }
+        console.log(`[PASS] Gateway Authorized: Action "${actionArg}" on "${targetArg}" is permitted.`);
+        process.exit(0);
+      }
+
+      console.error(
+        "Usage:\n  governance exec -- <shell command>\n  governance exec --action=<write|modify|delete|add_dependency> --target=<path>",
+      );
+      process.exit(1);
+    },
+  },
+  "agent:log": {
+    description: "Display audit log history of agent execution attempts and gateway enforcement",
+    action: () => {
+      const history = getAgentExecutionHistory(process.cwd());
+      console.log(`\n================================================================`);
+      console.log(`   AGENT EXECUTION GATEWAY AUDIT LOG`);
+      console.log(`================================================================`);
+      if (history.length === 0) {
+        console.log(`[INFO] No recorded agent execution entries found.`);
+      } else {
+        console.log(`Total events recorded: ${history.length}\n`);
+        for (const item of history.slice(-50)) {
+          const tag = item.status === "BLOCKED" ? "[BLOCKED]" : `[${item.status}]`;
+          console.log(`  ${tag.padEnd(10)} ${item.timestamp} | ${item.action} -> ${item.target}`);
+        }
+      }
+      console.log(`================================================================\n`);
     },
   },
   "init:contract": {
@@ -682,13 +810,29 @@ Usage:
 
 Core Architecture & Decision Commands:
 ${Object.entries(COMMANDS)
-  .filter(([cmd]) => ["init", "status", "new:adr", "list:adr", "new:story", "new:threat", "approve:spec", "deprecate:story", "rules", "install:hooks", "install:ci"].includes(cmd))
+  .filter(([cmd]) =>
+    [
+      "init",
+      "status",
+      "new:adr",
+      "list:adr",
+      "new:story",
+      "new:threat",
+      "approve:spec",
+      "deprecate:story",
+      "rules",
+      "install:hooks",
+      "install:ci",
+    ].includes(cmd),
+  )
   .map(([name, meta]) => `   ${name.padEnd(16)} ${meta.description}`)
   .join("\n")}
 
 Verification & Engineering Gates:
 ${Object.entries(COMMANDS)
-  .filter(([cmd]) => ["check", "audit:git", "audit:design", "secrets", "deps", "map", "context"].includes(cmd))
+  .filter(([cmd]) =>
+    ["check", "audit:git", "audit:design", "secrets", "deps", "map", "context"].includes(cmd),
+  )
   .map(([name, meta]) => `   ${name.padEnd(16)} ${meta.description}`)
   .join("\n")}
 
@@ -702,15 +846,6 @@ Options:
    --help, -h     Show this help guide
    --version, -v  Print Governance engine version
 `);
-}
-
-function runNpmScript(scriptName) {
-  const result = spawnSync("npm", ["run", scriptName], {
-    cwd: rootDir,
-    stdio: "inherit",
-    shell: true,
-  });
-  process.exit(result.status ?? 0);
 }
 
 function runScript(scriptRelativePath, extraArgs = []) {

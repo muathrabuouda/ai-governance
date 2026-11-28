@@ -89,10 +89,7 @@ export function loadAgentContract(projectRoot = process.cwd()) {
       ...DEFAULT_AGENT_CONTRACT,
       ...custom,
       protectedPaths: [
-        ...new Set([
-          ...DEFAULT_AGENT_CONTRACT.protectedPaths,
-          ...(custom.protectedPaths || []),
-        ]),
+        ...new Set([...DEFAULT_AGENT_CONTRACT.protectedPaths, ...(custom.protectedPaths || [])]),
       ],
       forbiddenActions: {
         ...DEFAULT_AGENT_CONTRACT.forbiddenActions,
@@ -112,7 +109,9 @@ export function loadAgentContract(projectRoot = process.cwd()) {
 export function initAgentContract(projectRoot = process.cwd(), force = false) {
   const contractPath = resolve(getGovernanceStateDir(projectRoot), "agent-contract.json");
   if (existsSync(contractPath) && !force) {
-    console.log(`[WARN] Agent contract already exists at .governance/agent-contract.json. Use --force to overwrite.`);
+    console.log(
+      `[WARN] Agent contract already exists at .governance/agent-contract.json. Use --force to overwrite.`,
+    );
     return false;
   }
   writeFileSync(contractPath, JSON.stringify(DEFAULT_AGENT_CONTRACT, null, 2), "utf8");
@@ -158,7 +157,7 @@ export function isPathProtected(relPath, protectedPaths = DEFAULT_AGENT_CONTRACT
  * @param {{ baseRef?: string }} [options]
  * @returns {{ passed: boolean, violations: string[], warnings: string[], auditedFiles: string[] }}
  */
-export function auditAgentChanges(projectRoot = process.cwd(), options = {}) {
+export function auditAgentChanges(projectRoot = process.cwd(), _options = {}) {
   const contract = loadAgentContract(projectRoot);
   const violations = [];
   const warnings = [];
@@ -277,11 +276,12 @@ export function loadApprovedDependencyNames(projectRoot = process.cwd()) {
     // prevent agent from self-authorizing new dependencies! Load authoritative content from HEAD.
     try {
       const relPath = normalizeRelPath(depsPath.replace(resolve(projectRoot), ""));
-      const isModified = execSync(`git status --porcelain -- "${relPath}"`, {
-        cwd: projectRoot,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim().length > 0;
+      const isModified =
+        execSync(`git status --porcelain -- "${relPath}"`, {
+          cwd: projectRoot,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim().length > 0;
 
       if (isModified) {
         content = execSync(`git show HEAD:"${relPath}"`, {
