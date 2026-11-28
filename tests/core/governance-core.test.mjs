@@ -14,7 +14,6 @@ import { join } from "node:path";
 import test, { describe } from "node:test";
 
 import {
-  BUILTIN_PROFILES,
   DEFAULT_POLICY,
   GateStatus,
   evaluateGate,
@@ -28,27 +27,30 @@ import {
   calculateBlockHash,
   deprecateStory,
   getGitAttestation,
-  getGovernanceStateDir,
   hashText,
   isKeyFingerprintAuthorized,
   loadGovernanceState,
-  normalizeKey,
   resolveStrictEnforcement,
   saveGovernanceState,
   verifyAuditChain,
   verifyCriteriaIntegrity,
-  verifyThreatModelCoverage,
 } from "../../scripts/state-guardian.mjs";
 
-import { detectStacks, isExecutableAvailable, runStage } from "../../scripts/stack-runner.mjs";
+import { detectStacks, isExecutableAvailable } from "../../scripts/stack-runner.mjs";
 import { generateVerdict, getGateBadge, loadLatestVerdict } from "../../scripts/verdict-engine.mjs";
-import { buildTraceabilityMatrix } from "../../scripts/traceability.mjs";
+import { buildTraceabilityMatrix, parseTestReport, CriteriaLifecycle } from "../../scripts/traceability.mjs";
 import {
   canAgentExecuteAction,
   initAgentContract,
   isPathProtected,
   loadAgentContract,
 } from "../../scripts/agent-control.mjs";
+import {
+  executeAgentAction,
+  interceptShellCommand,
+  getAgentExecutionHistory,
+  getAgentExecutionLogPath,
+} from "../../scripts/gateway.mjs";
 
 describe("Governance Core Integration Tests", () => {
   describe("Policy Engine", () => {
@@ -250,12 +252,11 @@ describe("Governance Core Integration Tests", () => {
     test("manages story lifecycle and deprecation without false violations", () => {
       const tempDir = mkdtempSync(join(tmpdir(), "gov-story-test-"));
       try {
-        const govDir = getGovernanceStateDir(tempDir);
         const state = {
           version: "1.0.0",
           specVersion: "1.0.0",
           storyHashes: {
-            "1": hashText("Acceptance criteria 1"),
+            1: hashText("Acceptance criteria 1"),
           },
           deprecatedStories: {},
           auditLog: [],
@@ -404,7 +405,11 @@ Some descriptive text without any table.
         assert.equal(attackResult, false, "Approval must fail when cryptographic key signature is missing");
 
         // 3. Ensure no state file was generated or modified
-        assert.equal(existsSync(join(govDir, "state.json")), false, "state.json must not be created on failed approval");
+        assert.equal(
+          existsSync(join(govDir, "state.json")),
+          false,
+          "state.json must not be created on failed approval",
+        );
 
         // 4. Verify that verifyCriteriaIntegrity correctly identifies unapproved specification
         const integrityCheck = verifyCriteriaIntegrity(tempDir);
@@ -433,16 +438,10 @@ Some descriptive text without any table.
       );
 
       // 3. Allowed list has full 40-char fingerprint, git log returned 16-char key ID
-      assert.equal(
-        isKeyFingerprintAuthorized({ signerKeyId: keyId }, [fullFingerprint]),
-        true,
-      );
+      assert.equal(isKeyFingerprintAuthorized({ signerKeyId: keyId }, [fullFingerprint]), true);
 
       // 4. Allowed list has 16-char key ID, git log returned full 40-char fingerprint
-      assert.equal(
-        isKeyFingerprintAuthorized({ signerFingerprint: fullFingerprint }, [keyId]),
-        true,
-      );
+      assert.equal(isKeyFingerprintAuthorized({ signerFingerprint: fullFingerprint }, [keyId]), true);
 
       // 5. Allowed list has primary fingerprint matching %GP
       assert.equal(
@@ -452,7 +451,9 @@ Some descriptive text without any table.
 
       // 6. Non-matching key fingerprint must be rejected
       assert.equal(
-        isKeyFingerprintAuthorized({ signerFingerprint: fullFingerprint }, ["FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"]),
+        isKeyFingerprintAuthorized({ signerFingerprint: fullFingerprint }, [
+          "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+        ]),
         false,
       );
     });
@@ -615,7 +616,11 @@ Some descriptive text without any table.
         assert.equal(unauthorizedResult, false, "Unauthorized GitHub actor must be rejected");
 
         // Authorized actor is accepted in non-strict mode
-        const authorizedResult = approveSpec("Muath R Abu Ouda <muathrabuouda@hotmail.com>", { actor: "muathrabuouda" }, tempDir);
+        const authorizedResult = approveSpec(
+          "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
+          { actor: "muathrabuouda" },
+          tempDir,
+        );
         assert.equal(authorizedResult, true, "Authorized GitHub actor must be accepted");
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
@@ -650,11 +655,7 @@ Some descriptive text without any table.
           }),
           "utf8",
         );
-        writeFileSync(
-          join(govDir, "policy.json"),
-          JSON.stringify({ profile: "strict" }),
-          "utf8",
-        );
+        writeFileSync(join(govDir, "policy.json"), JSON.stringify({ profile: "strict" }), "utf8");
         assert.equal(resolveStrictEnforcement(tempDir), true);
 
         // Explicit option override takes precedence
@@ -680,30 +681,40 @@ Some descriptive text without any table.
         execSync('git config user.email "test@example.com"', execOptions);
 
         const specFile = join(docsDir, "02-spec.md");
-        writeFileSync(specFile, "# Specification\n### Story 1: Test\n| ID | Given | When | Then |\n| :-- | :--- | :--- | :--- |\n| 1.1 | A | B | C |\n", "utf8");
+        writeFileSync(
+          specFile,
+          "# Specification\n### Story 1: Test\n| ID | Given | When | Then |\n| :-- | :--- | :--- | :--- |\n| 1.1 | A | B | C |\n",
+          "utf8",
+        );
 
         const stateFile = join(govDir, "state.json");
         const state = {
           version: "1.0.0",
           specVersion: "1.0.0",
-          storyHashes: { "1": hashText("| ID | Given | When | Then |\n| :-- | :--- | :--- | :--- |\n| 1.1 | A | B | C |") },
-          auditLog: [{
-            index: 0,
-            timestamp: new Date().toISOString(),
-            action: "APPROVE_SPEC",
-            author: "Tester",
-            previousHash: "0000000000000000000000000000000000000000000000000000000000000000",
-            hash: "placeholder",
-            attestation: {
-              commitSha: "1111111111111111111111111111111111111111",
-              treeHash: "2222222222222222222222222222222222222222",
-              signatureStatus: "G",
+          storyHashes: {
+            1: hashText("| ID | Given | When | Then |\n| :-- | :--- | :--- | :--- |\n| 1.1 | A | B | C |"),
+          },
+          auditLog: [
+            {
+              index: 0,
+              timestamp: new Date().toISOString(),
+              action: "APPROVE_SPEC",
+              author: "Tester",
+              previousHash: "0000000000000000000000000000000000000000000000000000000000000000",
+              hash: "placeholder",
+              attestation: {
+                commitSha: "1111111111111111111111111111111111111111",
+                treeHash: "2222222222222222222222222222222222222222",
+                signatureStatus: "G",
+              },
+              details: {},
             },
-            details: {},
-          }],
+          ],
         };
         state.auditLog[0].hash = calculateBlockHash(state.auditLog[0]);
-        state.headAnchor = hashText(`${state.auditLog[0].hash}:${state.auditLog[0].attestation.commitSha}:${state.auditLog[0].attestation.treeHash}`);
+        state.headAnchor = hashText(
+          `${state.auditLog[0].hash}:${state.auditLog[0].attestation.commitSha}:${state.auditLog[0].attestation.treeHash}`,
+        );
         writeFileSync(stateFile, JSON.stringify(state, null, 2), "utf8");
 
         // Initial commit
@@ -873,7 +884,7 @@ Some descriptive text without any table.
           },
         ];
 
-        const verdict = generateVerdict(
+        generateVerdict(
           { gateResults, policy: { profile: "standard" }, stacks: [], startTime: Date.now() },
           tempDir,
         );
@@ -902,7 +913,13 @@ Some descriptive text without any table.
       const tempDir = mkdtempSync(join(tmpdir(), "gov-verdict-proof-"));
       try {
         const dummyGateResults = [
-          { key: "spec_integrity", name: "Spec Lock", required: true, passed: true, status: GateStatus.PASSED },
+          {
+            key: "spec_integrity",
+            name: "Spec Lock",
+            required: true,
+            passed: true,
+            status: GateStatus.PASSED,
+          },
         ];
         const policy = { profile: "standard", fail_on_warning: false };
         const verdict = generateVerdict(
@@ -1079,6 +1096,142 @@ test("verifies criteria 1.1 and 1.2", () => {});
         assert.ok(state.baseline);
         assert.equal(state.baseline.blockIndex, 0);
         assert.equal(state.auditLog[0].action, "RE_BASELINE");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("intercepts agent execution through Active Execution Gateway", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-gateway-test-"));
+      try {
+        const govDir = join(tempDir, ".governance");
+        mkdirSync(govDir, { recursive: true });
+
+        // 1. Block unauthorized mutation of protected state.json
+        let writeExecuted = false;
+        const blockedRes = executeAgentAction(
+          "write",
+          ".governance/state.json",
+          () => {
+            writeExecuted = true;
+          },
+          { projectRoot: tempDir },
+        );
+
+        assert.equal(blockedRes.allowed, false);
+        assert.equal(blockedRes.blocked, true);
+        assert.equal(writeExecuted, false);
+
+        // 2. Allow authorized action on src file and record log
+        let allowedExecuted = false;
+        const allowedRes = executeAgentAction(
+          "write",
+          "src/index.ts",
+          () => {
+            allowedExecuted = true;
+            return "ok";
+          },
+          { projectRoot: tempDir },
+        );
+
+        assert.equal(allowedRes.allowed, true);
+        assert.equal(allowedRes.blocked, false);
+        assert.equal(allowedExecuted, true);
+        assert.equal(allowedRes.result, "ok");
+
+        // 3. Verify audit log was recorded in .governance/evidence/agent-execution.log
+        assert.ok(getAgentExecutionLogPath(tempDir).endsWith("agent-execution.log"));
+        const history = getAgentExecutionHistory(tempDir);
+        assert.ok(history.length >= 2);
+        assert.ok(history.some((h) => h.status === "BLOCKED" && h.target === ".governance/state.json"));
+        assert.ok(history.some((h) => h.status === "ALLOWED" && h.target === "src/index.ts"));
+
+        // 4. Intercept shell command with unapproved dependency installation
+        const cmdRes = interceptShellCommand("npm install unapproved-evil-dep", {
+          projectRoot: tempDir,
+        });
+        assert.equal(cmdRes.allowed, false);
+        assert.equal(cmdRes.exitCode, 1);
+        assert.match(cmdRes.error, /GATEWAY DENIED/);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    test("verifies full 5-stage Semantic Verification Lifecycle (PENDING to PASSED)", () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "gov-lifecycle-test-"));
+      try {
+        const docsDir = join(tempDir, "docs", "foundation");
+        const testsDir = join(tempDir, "tests");
+        const srcDir = join(tempDir, "src");
+        mkdirSync(docsDir, { recursive: true });
+        mkdirSync(testsDir, { recursive: true });
+        mkdirSync(srcDir, { recursive: true });
+
+        // Specification
+        const specContent = `# Specification
+### Story 1: Identity Gateway
+| ID  | Given | When | Then |
+| :-- | :--- | :--- | :--- |
+| 1.1 | Actor initialized | Token verified | Granted |
+| 1.2 | Invalid actor | Token verified | Denied |
+`;
+        writeFileSync(join(docsDir, "02-spec.md"), specContent, "utf8");
+
+        // Implementation file
+        writeFileSync(join(srcDir, "story-1-gateway.ts"), "// Story 1 implementation\n", "utf8");
+
+        // Test file with AC bindings
+        const testContent = `
+test("Story 1 [AC-1.1] valid actor granted", () => {});
+test("Story 1 [AC-1.2] invalid actor denied", () => {});
+`;
+        writeFileSync(join(testsDir, "story1.test.ts"), testContent, "utf8");
+
+        // Approve specification in state
+        approveSpec("Muath R Abu Ouda <muathrabuouda@hotmail.com>", { reason: "Approve Story 1" }, tempDir);
+
+        // 1. Without live test results: criteria are BOUND
+        const matrixBound = buildTraceabilityMatrix(tempDir);
+        assert.ok(matrixBound["1"]);
+        assert.equal(matrixBound["1"].status, "VERIFIED"); // static verification fallback
+        assert.equal(
+          matrixBound["1"].semanticVerification.criteriaLifecycle["1.1"].stage,
+          CriteriaLifecycle.BOUND,
+        );
+
+        // 2. With live passing test results: criteria progress to PASSED and story status is VERIFIED
+        const livePassResults = [
+          { name: "Story 1 [AC-1.1] valid actor granted", status: "passed", duration: 12 },
+          { name: "Story 1 [AC-1.2] invalid actor denied", status: "passed", duration: 8 },
+        ];
+        const parsedReport = parseTestReport(JSON.stringify({ tests: livePassResults }));
+        assert.equal(parsedReport.length, 2);
+        assert.equal(parsedReport[0].status, "passed");
+
+        const matrixPassed = buildTraceabilityMatrix(tempDir, { testResults: livePassResults });
+        assert.equal(matrixPassed["1"].status, "VERIFIED");
+        assert.equal(
+          matrixPassed["1"].semanticVerification.criteriaLifecycle["1.1"].stage,
+          CriteriaLifecycle.PASSED,
+        );
+        assert.equal(
+          matrixPassed["1"].semanticVerification.criteriaLifecycle["1.2"].stage,
+          CriteriaLifecycle.PASSED,
+        );
+        assert.equal(matrixPassed["1"].semanticVerification.fullyPassed, true);
+
+        // 3. With a failing test result: criteria lifecycle reflects FAILED and story is VERIFICATION_FAILED
+        const liveFailResults = [
+          { name: "Story 1 [AC-1.1] valid actor granted", status: "passed" },
+          { name: "Story 1 [AC-1.2] invalid actor denied", status: "failed" },
+        ];
+        const matrixFailed = buildTraceabilityMatrix(tempDir, { testResults: liveFailResults });
+        assert.equal(matrixFailed["1"].status, "VERIFICATION_FAILED");
+        assert.equal(
+          matrixFailed["1"].semanticVerification.criteriaLifecycle["1.2"].stage,
+          CriteriaLifecycle.FAILED,
+        );
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
