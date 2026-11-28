@@ -2,9 +2,13 @@
 
 > **Verdict:** **[VERDICT: APPROVED]**  
 > **Summary:** All active verification gates passed  
-> **Timestamp:** 2026-11-28T07:16:12.420Z (62879ms)  
-> **Content Digest (SHA-256):** `631bd29589fae3d9bdd4f1d84cdcb46884f69a6e0536ce3ec7268d91f309c37d`  
-> **Evidence Digital Attestation:** Verified (Cryptographically verified via detached GPG signature (key: 173E65E275BE3CD344241ECC0F2E74E6E851065E))  
+> **Timestamp:** 2026-11-28T09:08:32.059Z (69523ms)  
+> **Content Digest (SHA-256):** `c503804dea42fb8cc3b6a7a116f873f398d73d305bbc2a75aaf1f3f4f937a7db`  
+> **Evidence Digital Attestation:** Unsigned (Stale detached GPG signature does not match regenerated verdict: gpg_verification_failed: Command failed: "C:/Program Files/Git/usr/bin/gpg.exe" --batch --status-fd 1 --verify "J:\ugarit\ugarit-ai\ai-governance\.governance\evidence\verdict.json.asc" "J:\ugarit\ugarit-ai\ai-governance\.governance\evidence\verdict.json"
+gpg: Signature made Sat Nov 28 11:06:48 2026 JST
+gpg:                using EDDSA key 173E65E275BE3CD344241ECC0F2E74E6E851065E
+gpg: BAD signature from "Muath R Abu Ouda <muathrabuouda@hotmail.com>" [ultimate]
+. Run 'governance evidence:sign' to re-sign current verdict.)  
 > **Git Commit Attestation:** Valid (Signed by Muath R Abu Ouda <muathrabuouda@hotmail.com> [173E65E275BE3CD344241ECC0F2E74E6E851065E])
 
 ---
@@ -12,14 +16,18 @@
 ## Evidence Integrity & Attestation
 
 - **Content Digest Algorithm:** `sha256`
-- **Digest Value:** `631bd29589fae3d9bdd4f1d84cdcb46884f69a6e0536ce3ec7268d91f309c37d`
-- **Detached GPG Attestation:** Verified (Cryptographically verified via detached GPG signature (key: 173E65E275BE3CD344241ECC0F2E74E6E851065E))
+- **Digest Value:** `c503804dea42fb8cc3b6a7a116f873f398d73d305bbc2a75aaf1f3f4f937a7db`
+- **Detached GPG Attestation:** Unsigned (Stale detached GPG signature does not match regenerated verdict: gpg_verification_failed: Command failed: "C:/Program Files/Git/usr/bin/gpg.exe" --batch --status-fd 1 --verify "J:\ugarit\ugarit-ai\ai-governance\.governance\evidence\verdict.json.asc" "J:\ugarit\ugarit-ai\ai-governance\.governance\evidence\verdict.json"
+gpg: Signature made Sat Nov 28 11:06:48 2026 JST
+gpg:                using EDDSA key 173E65E275BE3CD344241ECC0F2E74E6E851065E
+gpg: BAD signature from "Muath R Abu Ouda <muathrabuouda@hotmail.com>" [ultimate]
+. Run 'governance evidence:sign' to re-sign current verdict.)
 - **Signature File:** `verdict.json.asc`
 
 ## Git Provenance & Commit Attestation
 
 - **Committer:** Muath R Abu Ouda <muathrabuouda@hotmail.com>
-- **Git Commit:** `97ae5d8801` (Tree: `a4a0e1c6cb`)
+- **Git Commit:** `2ee5e52c28` (Tree: `881495ffe1`)
 - **Git Commit Signature:** Valid (Signed by Muath R Abu Ouda <muathrabuouda@hotmail.com> [173E65E275BE3CD344241ECC0F2E74E6E851065E])
 - **State Head Anchor:** `7953e4f8d5c3c72a...`
 - **Policy Profile:** `strict` (Fail on warning: true)
