@@ -1,9 +1,9 @@
 {
   "version": "1.0.0",
-  "verdict": "REQUIRES_REVIEW",
-  "summary": "2 gate(s) completed with warnings or require review: Code Formatting, Static Analysis & Linting",
-  "timestamp": "2026-11-27T17:48:02.229Z",
-  "durationMs": 48282,
+  "verdict": "APPROVED",
+  "summary": "All active verification gates passed",
+  "timestamp": "2026-11-28T07:16:12.420Z",
+  "durationMs": 62879,
   "environment": {
     "platform": "win32",
     "nodeVersion": "v24.18.0",
@@ -13,22 +13,22 @@
     "isGit": true,
     "userName": "Muath R Abu Ouda",
     "userEmail": "muathrabuouda@hotmail.com",
-    "commitSha": "4034c7db12227f408b73c0e274313f91473af35a",
-    "treeHash": "d27c0d57cbca530efcfeb77139b168a2abbf2aea",
+    "commitSha": "97ae5d8801c46e3ab19c6a6eb7cd5465ee87382d",
+    "treeHash": "a4a0e1c6cbe743979701c540e4cea781a44f6779",
     "signatureStatus": "G",
     "signerName": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
     "signerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
     "stateHeadAnchor": "7953e4f8d5c3c72a7e5805602eb80c9a391bfc218233541cc01239e8709d7026"
   },
   "policy": {
-    "profile": "standard",
-    "failOnWarning": false
+    "profile": "strict",
+    "failOnWarning": true
   },
   "stacks": [
     {
       "name": "Node.js / TypeScript",
       "type": "node",
-      "hasInstalledDeps": false
+      "hasInstalledDeps": true
     }
   ],
   "gates": [
@@ -80,20 +80,20 @@
     {
       "key": "formatting",
       "name": "Code Formatting",
-      "required": false,
-      "status": "REQUIRES_REVIEW",
+      "required": true,
+      "status": "PASSED",
       "passed": true,
       "blocking": false,
-      "message": "[WARN] Code Formatting check failed (optional gate, non-blocking): Code Formatting (Node.js / TypeScript) failed (exit code: 1)"
+      "message": "Code Formatting (Node.js / TypeScript) passed"
     },
     {
       "key": "static_analysis",
       "name": "Static Analysis & Linting",
-      "required": false,
-      "status": "REQUIRES_REVIEW",
+      "required": true,
+      "status": "PASSED",
       "passed": true,
       "blocking": false,
-      "message": "[WARN] Static Analysis & Linting check failed (optional gate, non-blocking): Static Analysis (Node.js / TypeScript) failed (exit code: 1)"
+      "message": "Static Analysis (Node.js / TypeScript) passed"
     },
     {
       "key": "test_suite",
@@ -107,7 +107,7 @@
     {
       "key": "design_system",
       "name": "UI Design Tokens & System Compliance",
-      "required": false,
+      "required": true,
       "status": "SKIPPED",
       "passed": true,
       "blocking": false,
@@ -116,13 +116,13 @@
   ],
   "contentDigest": {
     "algorithm": "sha256",
-    "value": "419f8e44417c20a48bc0292f40c2df172a6181839a8eacb51ff7758fa46387eb"
+    "value": "631bd29589fae3d9bdd4f1d84cdcb46884f69a6e0536ce3ec7268d91f309c37d"
   },
   "gitAttestation": {
     "isGit": true,
     "author": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
-    "commitSha": "4034c7db12227f408b73c0e274313f91473af35a",
-    "treeHash": "d27c0d57cbca530efcfeb77139b168a2abbf2aea",
+    "commitSha": "97ae5d8801c46e3ab19c6a6eb7cd5465ee87382d",
+    "treeHash": "a4a0e1c6cbe743979701c540e4cea781a44f6779",
     "commitSignatureStatus": "G",
     "commitSignerName": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
     "commitSignerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
@@ -130,11 +130,12 @@
     "verified": true
   },
   "evidenceAttestation": {
-    "signed": false,
-    "type": "content_digest_only",
-    "signatureFile": null,
-    "verified": false,
-    "description": "Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest)"
+    "signed": true,
+    "type": "detached-gpg",
+    "signatureFile": "verdict.json.asc",
+    "verified": true,
+    "signerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
+    "description": "Cryptographically verified via detached GPG signature (key: 173E65E275BE3CD344241ECC0F2E74E6E851065E)"
   },
   "digitalProof": {
     "type": "git-commit-gpg",
@@ -145,5 +146,5 @@
     "signerFingerprint": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
     "verified": true
   },
-  "signature": "419f8e44417c20a48bc0292f40c2df172a6181839a8eacb51ff7758fa46387eb"
+  "signature": "631bd29589fae3d9bdd4f1d84cdcb46884f69a6e0536ce3ec7268d91f309c37d"
 }

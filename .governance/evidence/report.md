@@ -1,10 +1,10 @@
 # Governance Verification Report
 
-> **Verdict:** **[VERDICT: REQUIRES REVIEW]**  
-> **Summary:** 2 gate(s) completed with warnings or require review: Code Formatting, Static Analysis & Linting  
-> **Timestamp:** 2026-11-27T17:48:02.229Z (48282ms)  
-> **Content Digest (SHA-256):** `419f8e44417c20a48bc0292f40c2df172a6181839a8eacb51ff7758fa46387eb`  
-> **Evidence Digital Attestation:** Unsigned (Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest))  
+> **Verdict:** **[VERDICT: APPROVED]**  
+> **Summary:** All active verification gates passed  
+> **Timestamp:** 2026-11-28T07:16:12.420Z (62879ms)  
+> **Content Digest (SHA-256):** `631bd29589fae3d9bdd4f1d84cdcb46884f69a6e0536ce3ec7268d91f309c37d`  
+> **Evidence Digital Attestation:** Verified (Cryptographically verified via detached GPG signature (key: 173E65E275BE3CD344241ECC0F2E74E6E851065E))  
 > **Git Commit Attestation:** Valid (Signed by Muath R Abu Ouda <muathrabuouda@hotmail.com> [173E65E275BE3CD344241ECC0F2E74E6E851065E])
 
 ---
@@ -12,17 +12,17 @@
 ## Evidence Integrity & Attestation
 
 - **Content Digest Algorithm:** `sha256`
-- **Digest Value:** `419f8e44417c20a48bc0292f40c2df172a6181839a8eacb51ff7758fa46387eb`
-- **Detached GPG Attestation:** Unsigned (Unsigned (Integrity guaranteed via SHA-256 Content Digest; run 'governance evidence:sign' to attest))
-- **Signature File:** `none (run 'governance evidence:sign')`
+- **Digest Value:** `631bd29589fae3d9bdd4f1d84cdcb46884f69a6e0536ce3ec7268d91f309c37d`
+- **Detached GPG Attestation:** Verified (Cryptographically verified via detached GPG signature (key: 173E65E275BE3CD344241ECC0F2E74E6E851065E))
+- **Signature File:** `verdict.json.asc`
 
 ## Git Provenance & Commit Attestation
 
 - **Committer:** Muath R Abu Ouda <muathrabuouda@hotmail.com>
-- **Git Commit:** `4034c7db12` (Tree: `d27c0d57cb`)
+- **Git Commit:** `97ae5d8801` (Tree: `a4a0e1c6cb`)
 - **Git Commit Signature:** Valid (Signed by Muath R Abu Ouda <muathrabuouda@hotmail.com> [173E65E275BE3CD344241ECC0F2E74E6E851065E])
 - **State Head Anchor:** `7953e4f8d5c3c72a...`
-- **Policy Profile:** `standard` (Fail on warning: false)
+- **Policy Profile:** `strict` (Fail on warning: true)
 
 ## Detected Engineering Stacks
 
@@ -39,10 +39,10 @@
 | [PASS] Secret Leaks & Token Scanning | Required | PASSED | No secret leaks detected |
 | [PASS] Dependency Version Pinning & Approval | Required | PASSED | All dependencies pinned and verified |
 | [PASS] Conventional Commit & Git Hygiene | Required | PASSED | Git commit conventions and history valid |
-| [WARN] Code Formatting | Optional | REQUIRES_REVIEW | [WARN] Code Formatting check failed (optional gate, non-blocking): Code Formatting (Node.js / TypeScript) failed (exit code: 1) |
-| [WARN] Static Analysis & Linting | Optional | REQUIRES_REVIEW | [WARN] Static Analysis & Linting check failed (optional gate, non-blocking): Static Analysis (Node.js / TypeScript) failed (exit code: 1) |
+| [PASS] Code Formatting | Required | PASSED | Code Formatting (Node.js / TypeScript) passed |
+| [PASS] Static Analysis & Linting | Required | PASSED | Static Analysis (Node.js / TypeScript) passed |
 | [PASS] Automated Test Suite | Required | PASSED | Test Suite (Node.js / TypeScript) passed |
-| [SKIP] UI Design Tokens & System Compliance | Optional | SKIPPED | [INFO] UI Design Tokens & System Compliance skipped: No frontend templates or UI stylesheets found (Not Applicable) |
+| [SKIP] UI Design Tokens & System Compliance | Required | SKIPPED | [INFO] UI Design Tokens & System Compliance skipped: No frontend templates or UI stylesheets found (Not Applicable) |
 
 ---
 

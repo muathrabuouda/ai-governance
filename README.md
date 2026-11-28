@@ -82,12 +82,15 @@ AI Governance protects criteria integrity through a multi-tier detection model:
 ### 2. Policy-Driven Execution Engine (`policy.json`)
 
 Verification rules are declared in `.governance/policy.json`, allowing teams to customize requirements across three standard profiles:
+
 - `strict`: All gates required; fails on any warning; requires test suites and clean Git history.
 - `standard`: Core security, specification, test suite, and dependency gates required; linters and formatters advise with warnings.
 - `lenient`: Permissive profile for rapid prototyping and initial project bootstrapping.
 
 #### Truthful Gate Outcome Taxonomy
+
 Instead of conflating skipped steps with passed results, every gate outputs an explicit, truthful status:
+
 - `PASSED` (`[PASS]`): Gate executed and satisfied all acceptance criteria.
 - `FAILED` (`[FAIL]`): Gate executed and failed checks.
 - `SKIPPED` (`[SKIP]`): Optional gate skipped intentionally with documented justification.
@@ -97,11 +100,13 @@ Instead of conflating skipped steps with passed results, every gate outputs an e
 ### 3. Verdict & Traceability Engine (`.governance/evidence/`)
 
 Every execution of `governance check` generates reproducible evidence in `.governance/evidence/`:
+
 1. **`verdict.json`:** Machine-readable compliance ledger signed with a SHA-256 digest, capturing committer identity, Git commit SHA, tree hash, policy profile, and full gate outcomes (`APPROVED` | `REJECTED` | `REQUIRES_REVIEW`).
 2. **`report.md`:** Clean markdown executive report with truthful status badges for pull request reviews and compliance audits.
 3. **`traceability.json`:** Requirement-to-code mapping linking user stories to implementation files, automated test suites, and STRIDE threat models.
 
 Inspect the latest verdict or traceability matrix at any time:
+
 ```bash
 governance verdict
 governance trace
@@ -110,6 +115,7 @@ governance trace
 ### 4. Agent Governance & Control Plane (`.governance/agent-contract.json`)
 
 To prevent autonomous coding agents from exceeding their mandate, AI Governance establishes an explicit **Agent Governance Contract**:
+
 - **Protected Paths:** Rejects agent edits to `.governance/state.json`, `.governance/policy.json`, `.governance/agent-contract.json`, `docs/foundation/adr/**`, and `LICENSE.md`.
 - **Forbidden Actions:** Restricts agents from deleting test files, disabling assertions, or tampering with governance configurations.
 - **Working Tree Audit:** Run `governance agent:audit` to verify uncommitted working tree changes against permission boundaries before committing.
@@ -130,37 +136,37 @@ governance agent:init
 governance <command> [options]
 ```
 
-| Command | Description |
-| :--- | :--- |
-| `check [--profile=...]` | Multi-stack verification pipeline enforcing all 9 policy gates (strict, standard, lenient). |
-| `verdict` | Displays the latest cryptographic governance verdict and audit proof summary. |
-| `trace [story]` | Displays the requirement-to-code and test traceability matrix. |
-| `agent:audit` | Audits working tree changes against Agent Governance Contract rules and protected paths. |
-| `agent:init [--force]` | Initializes or resets the Agent Governance Contract (`.governance/agent-contract.json`). |
-| `status` | Summarizes project governance status, registered ADRs, and active story progression. |
-| `init [title] [--force]` | Initializes the full 3-pillar methodology documentation suite safely. |
-| `approve:spec [name] [--prune]` | Formally approves and cryptographically locks Acceptance Criteria into `.governance/state.json`. |
-| `deprecate:story <id> [reason]` | Deprecates an approved story in the audit ledger and spec with reason tracking. |
-| `new:adr <title>` | Records a new Architecture Decision Record in `docs/foundation/adr/`. |
-| `list:adr` | Lists all Architecture Decision Records and their statuses. |
-| `new:story <id> <title>` | Scaffolds a new user story with acceptance criteria (prevents duplicates). |
-| `new:threat <id> [title]` | Creates a story-level STRIDE threat model in `docs/lifecycle/threat-model/`. |
-| `rules` | Generates managed AI agent instructions (`.cursorrules`, `CLAUDE.md`, Copilot). |
-| `install:hooks` | Installs Git pre-commit verification hook (preserves existing hooks with real exit codes). |
-| `install:ci` | Generates stack-aware GitHub Actions workflow (`.github/workflows/governance-gate.yml`) with Gitleaks. |
-| `audit:git` | Audits git commits against Conventional Commits standards. |
-| `audit:design` | Audits UI templates for Design System rules (70-20-10 distribution, accent-only green). |
-| `secrets` | Scans repository for exposed API keys, private tokens, and credentials. |
-| `deps` | Verifies that all dependencies are strictly pinned and security-approved. |
-| `map` | Generates a structured repository architectural map (`docs/repo-map.md`). |
-| `prompt [phase]` | Displays engineering prompts across the 13 methodology phases (00 to 12). |
+| Command                         | Description                                                                                            |
+| :------------------------------ | :----------------------------------------------------------------------------------------------------- |
+| `check [--profile=...]`         | Multi-stack verification pipeline enforcing all 9 policy gates (strict, standard, lenient).            |
+| `verdict`                       | Displays the latest cryptographic governance verdict and audit proof summary.                          |
+| `trace [story]`                 | Displays the requirement-to-code and test traceability matrix.                                         |
+| `agent:audit`                   | Audits working tree changes against Agent Governance Contract rules and protected paths.               |
+| `agent:init [--force]`          | Initializes or resets the Agent Governance Contract (`.governance/agent-contract.json`).               |
+| `status`                        | Summarizes project governance status, registered ADRs, and active story progression.                   |
+| `init [title] [--force]`        | Initializes the full 3-pillar methodology documentation suite safely.                                  |
+| `approve:spec [name] [--prune]` | Formally approves and cryptographically locks Acceptance Criteria into `.governance/state.json`.       |
+| `deprecate:story <id> [reason]` | Deprecates an approved story in the audit ledger and spec with reason tracking.                        |
+| `new:adr <title>`               | Records a new Architecture Decision Record in `docs/foundation/adr/`.                                  |
+| `list:adr`                      | Lists all Architecture Decision Records and their statuses.                                            |
+| `new:story <id> <title>`        | Scaffolds a new user story with acceptance criteria (prevents duplicates).                             |
+| `new:threat <id> [title]`       | Creates a story-level STRIDE threat model in `docs/lifecycle/threat-model/`.                           |
+| `rules`                         | Generates managed AI agent instructions (`.cursorrules`, `CLAUDE.md`, Copilot).                        |
+| `install:hooks`                 | Installs Git pre-commit verification hook (preserves existing hooks with real exit codes).             |
+| `install:ci`                    | Generates stack-aware GitHub Actions workflow (`.github/workflows/governance-gate.yml`) with Gitleaks. |
+| `audit:git`                     | Audits git commits against Conventional Commits standards.                                             |
+| `audit:design`                  | Audits UI templates for Design System rules (70-20-10 distribution, accent-only green).                |
+| `secrets`                       | Scans repository for exposed API keys, private tokens, and credentials.                                |
+| `deps`                          | Verifies that all dependencies are strictly pinned and security-approved.                              |
+| `map`                           | Generates a structured repository architectural map (`docs/repo-map.md`).                              |
+| `prompt [phase]`                | Displays engineering prompts across the 13 methodology phases (00 to 12).                              |
 
 ---
 
 ## Author & Vision
 
-* **Muath R Abu Ouda** — Lead Architect & Creator ([GitHub](https://github.com/muathrabuouda))
-* Built for developers and autonomous agents committed to rigorous software verification.
+- **Muath R Abu Ouda** — Lead Architect & Creator ([GitHub](https://github.com/muathrabuouda))
+- Built for developers and autonomous agents committed to rigorous software verification.
 
 ## License
 
