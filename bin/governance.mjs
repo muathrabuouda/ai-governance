@@ -217,7 +217,6 @@ const COMMANDS = {
 
       const startTime = Date.now();
       const gateResults = [];
-      let failed = false;
 
       // 1. Acceptance Criteria Integrity Gate (Spec Lock)
       console.log("\n[STAGE 1/9] Verifying Specification & Acceptance Criteria Integrity...");
@@ -249,7 +248,6 @@ const COMMANDS = {
         console.log("   [PASS] Acceptance Criteria integrity intact (no tampering detected)");
       } else {
         console.error(`   ${g1.message}`);
-        if (g1.blocking) failed = true;
       }
 
       // 2. Threat Model Coverage Gate
@@ -278,7 +276,6 @@ const COMMANDS = {
         console.log("   [PASS] Threat model coverage verified for active stories");
       } else {
         console.error(`   ${g2.message}`);
-        if (g2.blocking) failed = true;
       }
 
       // 3. Secrets Scan in current project
@@ -305,7 +302,6 @@ const COMMANDS = {
         required: policy.gates.secrets.required,
         ...g3,
       });
-      if (!g3.passed && g3.blocking) failed = true;
 
       // 4. Dependencies Verification Gate
       console.log("\n[STAGE 4/9] Verifying Dependencies Pinning and Approvals...");
@@ -333,7 +329,6 @@ const COMMANDS = {
         required: policy.gates.dependencies.required,
         ...g4,
       });
-      if (!g4.passed && g4.blocking) failed = true;
 
       // 5. Audit Git commits
       console.log("\n[STAGE 5/9] Auditing Git commits...");
@@ -362,129 +357,81 @@ const COMMANDS = {
         required: policy.gates.git_audit.required,
         ...g5,
       });
-      if (!g5.passed && g5.blocking) failed = true;
 
-      // 6. Formatting Verification across all stacks
-      let anyFormatRun = false;
-      let lastFormatGate = null;
-      for (const st of stacks) {
-        if (st.formatCmd) {
-          anyFormatRun = true;
-          console.log(`\n[STAGE 6/9] Verifying Code Formatting (${st.name})...`);
-          const res = runStage(
-            `Code Formatting (${st.name})`,
-            st.formatCmd.cmd,
-            st.formatCmd.args,
-            process.cwd(),
+      const stackGates = [
+        {
+          key: "formatting",
+          stage: 6,
+          label: "Code Formatting",
+          commandKey: "formatCmd",
+          missingMessage: "No project code formatter configured",
+        },
+        {
+          key: "static_analysis",
+          stage: 7,
+          label: "Static Analysis",
+          commandKey: "lintCmd",
+          missingMessage: "No project linter configured",
+        },
+        {
+          key: "test_suite",
+          stage: 8,
+          label: "Test Suite",
+          commandKey: "testCmd",
+          missingMessage: "No test runner configured in active stack",
+        },
+      ];
+      for (const { key, stage, label, commandKey, missingMessage } of stackGates) {
+        const results = [];
+        for (const stack of stacks) {
+          const command = stack[commandKey];
+          if (!command) continue;
+
+          const name = `${label} (${stack.name})`;
+          console.log(`\n[STAGE ${stage}/9] Running ${name}...`);
+          const outcome = runStage(name, command.cmd, command.args, process.cwd());
+          const message =
+            outcome.status === GateStatus.NOT_CONFIGURED ? `${name}: ${outcome.message}` : outcome.message;
+          const gate = evaluateGate(key, { ...outcome, message }, policy);
+          results.push(gate);
+          if (!outcome.passed) console.log(`\n${gate.message}`);
+        }
+
+        if (results.length === 0) {
+          const details =
+            key === "test_suite"
+              ? stacks
+                  .filter((stack) => stack.missingDepsMessage)
+                  .map((stack) => `${stack.name}: ${stack.missingDepsMessage}`)
+                  .join("; ")
+              : "";
+          const gate = evaluateGate(
+            key,
+            {
+              status: GateStatus.NOT_CONFIGURED,
+              message: details ? `${missingMessage} (${details})` : missingMessage,
+            },
+            policy,
           );
-          const g = evaluateGate("formatting", res, policy);
-          lastFormatGate = g;
-          if (g.message && !res.passed) {
-            console.log(`\n${g.message}`);
-          }
-          if (!g.passed && g.blocking) failed = true;
+          console.log(`\n${gate.message}`);
+          results.push(gate);
         }
-      }
-      if (!anyFormatRun) {
-        const g = evaluateGate(
-          "formatting",
-          {
-            status: GateStatus.NOT_CONFIGURED,
-            message: "No project code formatter configured",
-          },
-          policy,
-        );
-        lastFormatGate = g;
-        console.log(`\n${g.message}`);
-        if (!g.passed && g.blocking) failed = true;
-      }
-      gateResults.push({
-        key: "formatting",
-        name: policy.gates.formatting.name,
-        required: policy.gates.formatting.required,
-        ...lastFormatGate,
-      });
 
-      // 7. Static Analysis / Linter across all stacks
-      let anyLintRun = false;
-      let lastLintGate = null;
-      for (const st of stacks) {
-        if (st.lintCmd) {
-          anyLintRun = true;
-          console.log(`\n[STAGE 7/9] Running Static Analysis & Lint (${st.name})...`);
-          const res = runStage(
-            `Static Analysis (${st.name})`,
-            st.lintCmd.cmd,
-            st.lintCmd.args,
-            process.cwd(),
-          );
-          const g = evaluateGate("static_analysis", res, policy);
-          lastLintGate = g;
-          if (g.message && !res.passed) {
-            console.log(`\n${g.message}`);
-          }
-          if (!g.passed && g.blocking) failed = true;
-        }
-      }
-      if (!anyLintRun) {
-        const g = evaluateGate(
-          "static_analysis",
-          {
-            status: GateStatus.NOT_CONFIGURED,
-            message: "No project linter configured",
-          },
-          policy,
-        );
-        lastLintGate = g;
-        console.log(`\n${g.message}`);
-        if (!g.passed && g.blocking) failed = true;
-      }
-      gateResults.push({
-        key: "static_analysis",
-        name: policy.gates.static_analysis.name,
-        required: policy.gates.static_analysis.required,
-        ...lastLintGate,
-      });
+        const result =
+          results.find((gate) => gate.blocking) ??
+          results.find((gate) => gate.status === GateStatus.REQUIRES_REVIEW) ??
+          results.find((gate) => gate.status === GateStatus.SKIPPED && gate.message.includes("[WARN]")) ??
+          results.find((gate) => gate.status === GateStatus.PASSED) ??
+          results[0];
 
-      // 8. Automated Test Suite Execution across all stacks
-      let anyTestRun = false;
-      let lastTestGate = null;
-      for (const st of stacks) {
-        if (st.testCmd) {
-          anyTestRun = true;
-          console.log(`\n[STAGE 8/9] Executing Automated Test Suite (${st.name})...`);
-          const res = runStage(`Test Suite (${st.name})`, st.testCmd.cmd, st.testCmd.args, process.cwd());
-          const g = evaluateGate("test_suite", res, policy);
-          lastTestGate = g;
-          if (!g.passed && g.blocking) failed = true;
-        }
+        gateResults.push({
+          key,
+          name: policy.gates[key].name,
+          required: policy.gates[key].required,
+          ...result,
+          message: results.map((gate) => gate.message).join(" / "),
+        });
       }
-      if (!anyTestRun) {
-        const missingDetails = stacks
-          .filter((s) => s.missingDepsMessage)
-          .map((s) => `${s.name}: ${s.missingDepsMessage}`)
-          .join("; ");
-        const message = missingDetails
-          ? `No test runner configured in active stack (${missingDetails})`
-          : "No test runner configured in active stack";
-        const g = evaluateGate(
-          "test_suite",
-          {
-            status: GateStatus.NOT_CONFIGURED,
-            message,
-          },
-          policy,
-        );
-        lastTestGate = g;
-        console.log(`\n${g.message}`);
-        if (!g.passed && g.blocking) failed = true;
-      }
-      gateResults.push({
-        key: "test_suite",
-        name: policy.gates.test_suite.name,
-        required: policy.gates.test_suite.required,
-        ...lastTestGate,
-      });
 
       // 9. Design System Audit (if UI files exist)
       console.log("\n[STAGE 9/9] Auditing UI Design Tokens...");
@@ -517,7 +464,6 @@ const COMMANDS = {
       if (g9.message && designResult.status !== 0 && designResult.status !== 2) {
         console.log(`\n${g9.message}`);
       }
-      if (!g9.passed && g9.blocking) failed = true;
       gateResults.push({
         key: "design_system",
         name: policy.gates.design_system.name,
@@ -537,13 +483,14 @@ const COMMANDS = {
       console.log(`   Signature:         ${verdict.signature.slice(0, 16)}...`);
       console.log(`================================================================`);
 
-      if (failed) {
+      if (verdict.verdict === "REJECTED") {
         console.error(`\n[FAIL] GOVERNANCE FAILED: One or more required policy gates failed!`);
         console.error(`       Fix violations before committing or pushing code.\n`);
         process.exit(1);
+      } else if (verdict.verdict === "REQUIRES_REVIEW") {
+        console.warn(`\n[WARN] GOVERNANCE REQUIRES REVIEW: ${verdict.summary}\n`);
       } else {
         console.log(`\n[PASS] GOVERNANCE PASSED: All active verification gates passed!\n`);
-        process.exit(0);
       }
     },
   },

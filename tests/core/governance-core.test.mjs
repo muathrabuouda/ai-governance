@@ -7,11 +7,12 @@
  */
 
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test, { describe } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   DEFAULT_POLICY,
@@ -53,6 +54,64 @@ import {
 } from "../../scripts/gateway.mjs";
 
 describe("Governance Core Integration Tests", () => {
+  describe("Multi-stack CLI verdict", () => {
+    for (const failingStack of ["PHP Package", "Node.js / TypeScript"]) {
+      test(
+        `rejects a required test failure in ${failingStack}`,
+        { skip: process.platform === "win32" && "Fixture uses POSIX executable wrappers" },
+        () => {
+          const projectRoot = mkdtempSync(join(tmpdir(), "gov-multi-stack-"));
+          const cliPath = fileURLToPath(new URL("../../bin/governance.mjs", import.meta.url));
+          const phpunitPath = join(projectRoot, "vendor", "bin", "phpunit");
+          const phpExit = failingStack === "PHP Package" ? 1 : 0;
+          const nodeExit = 1 - phpExit;
+
+          try {
+            mkdirSync(dirname(phpunitPath), { recursive: true });
+            writeFileSync(phpunitPath, `#!/bin/sh\nexit ${phpExit}\n`, {
+              mode: 0o755,
+            });
+            for (const tool of ["pint", "phpstan"]) {
+              writeFileSync(join(dirname(phpunitPath), tool), "#!/bin/sh\nexit 1\n", {
+                mode: 0o755,
+              });
+            }
+            writeFileSync(join(projectRoot, "composer.json"), "{}");
+            writeFileSync(
+              join(projectRoot, "package.json"),
+              JSON.stringify({
+                scripts: { test: `node -e "process.exit(${nodeExit})"`, format: "node -v", lint: "node -v" },
+              }),
+            );
+
+            const result = spawnSync(process.execPath, [cliPath, "check", "--profile=standard"], {
+              cwd: projectRoot,
+              encoding: "utf8",
+            });
+            assert.equal(result.status, 1, result.stderr);
+
+            const verdict = loadLatestVerdict(projectRoot);
+            assert.equal(verdict.verdict, "REJECTED");
+            const testGate = verdict.gates.find((gate) => gate.key === "test_suite");
+            assert.equal(testGate.status, GateStatus.FAILED);
+            assert.equal(testGate.blocking, true);
+            assert.match(testGate.message, /Test Suite \(PHP Package\)/);
+            assert.match(testGate.message, /Test Suite \(Node\.js \/ TypeScript\)/);
+            for (const key of ["formatting", "static_analysis"]) {
+              const gate = verdict.gates.find((entry) => entry.key === key);
+              assert.equal(gate.status, GateStatus.REQUIRES_REVIEW);
+              assert.equal(gate.blocking, false);
+              assert.match(gate.message, /\(PHP Package\) failed/);
+              assert.match(gate.message, /\(Node\.js \/ TypeScript\) passed/);
+            }
+          } finally {
+            rmSync(projectRoot, { recursive: true, force: true });
+          }
+        },
+      );
+    }
+  });
+
   describe("Policy Engine", () => {
     test("evaluates passed gate as non-blocking passed", () => {
       const res = evaluateGate("test_gate", { status: GateStatus.PASSED, message: "OK" });
