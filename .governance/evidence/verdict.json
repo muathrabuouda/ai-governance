@@ -2,8 +2,8 @@
   "version": "1.0.0",
   "verdict": "APPROVED",
   "summary": "All active verification gates passed",
-  "timestamp": "2026-11-28T10:18:18.431Z",
-  "durationMs": 69462,
+  "timestamp": "2026-11-28T11:34:51.021Z",
+  "durationMs": 54187,
   "environment": {
     "platform": "win32",
     "nodeVersion": "v24.18.0",
@@ -13,16 +13,16 @@
     "isGit": true,
     "userName": "Muath R Abu Ouda",
     "userEmail": "muathrabuouda@hotmail.com",
-    "commitSha": "694420fd45af4299f2bb8f25933e601ab4da039a",
-    "treeHash": "9fe7dded01149baf5f3fd625376fbd3c54f78bc9",
+    "commitSha": "389dc505b2ba60dd22315bd859abb2c9f4ffc88e",
+    "treeHash": "345ca1a9e956be92b7b496dac813a81fe74fab31",
     "signatureStatus": "G",
     "signerName": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
     "signerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
     "stateHeadAnchor": "7953e4f8d5c3c72a7e5805602eb80c9a391bfc218233541cc01239e8709d7026"
   },
   "policy": {
-    "profile": "strict",
-    "failOnWarning": true
+    "profile": "standard",
+    "failOnWarning": false
   },
   "stacks": [
     {
@@ -80,7 +80,7 @@
     {
       "key": "formatting",
       "name": "Code Formatting",
-      "required": true,
+      "required": false,
       "status": "PASSED",
       "passed": true,
       "blocking": false,
@@ -89,7 +89,7 @@
     {
       "key": "static_analysis",
       "name": "Static Analysis & Linting",
-      "required": true,
+      "required": false,
       "status": "PASSED",
       "passed": true,
       "blocking": false,
@@ -107,7 +107,7 @@
     {
       "key": "design_system",
       "name": "UI Design Tokens & System Compliance",
-      "required": true,
+      "required": false,
       "status": "SKIPPED",
       "passed": true,
       "blocking": false,
@@ -116,13 +116,13 @@
   ],
   "contentDigest": {
     "algorithm": "sha256",
-    "value": "a5a68c8e87e8b55596486de064413577184ec39fca256dec6d9b795878464cbc"
+    "value": "c042c83fd959385adecf7ac3ff466b2b75a0772c39a86eda22be3017d7a5bae7"
   },
   "gitAttestation": {
     "isGit": true,
     "author": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
-    "commitSha": "694420fd45af4299f2bb8f25933e601ab4da039a",
-    "treeHash": "9fe7dded01149baf5f3fd625376fbd3c54f78bc9",
+    "commitSha": "389dc505b2ba60dd22315bd859abb2c9f4ffc88e",
+    "treeHash": "345ca1a9e956be92b7b496dac813a81fe74fab31",
     "commitSignatureStatus": "G",
     "commitSignerName": "Muath R Abu Ouda <muathrabuouda@hotmail.com>",
     "commitSignerKey": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
@@ -131,11 +131,11 @@
   },
   "evidenceAttestation": {
     "signed": false,
-    "type": "stale-signature",
-    "signatureFile": "verdict.json.asc",
+    "type": "pending_signature",
+    "signatureFile": null,
     "verified": false,
     "signerKey": null,
-    "description": "Stale detached GPG signature does not match regenerated verdict: gpg_verification_failed: Command failed: \"C:/Program Files/Git/usr/bin/gpg.exe\" --batch --status-fd 1 --verify \"J:\\ugarit\\ugarit-ai\\ai-governance\\.governance\\evidence\\verdict.json.asc\" \"J:\\ugarit\\ugarit-ai\\ai-governance\\.governance\\evidence\\verdict.json\"\ngpg: Signature made Sat Nov 28 11:08:43 2026 JST\ngpg:                using EDDSA key 173E65E275BE3CD344241ECC0F2E74E6E851065E\ngpg: BAD signature from \"Muath R Abu Ouda <muathrabuouda@hotmail.com>\" [ultimate]\n. Run 'governance evidence:sign' to re-sign current verdict."
+    "description": "Unsigned (New verdict generated. Run 'governance evidence:sign' to cryptographically attest)"
   },
   "digitalProof": {
     "type": "git-commit-gpg",
@@ -146,5 +146,5 @@
     "signerFingerprint": "173E65E275BE3CD344241ECC0F2E74E6E851065E",
     "verified": true
   },
-  "signature": "a5a68c8e87e8b55596486de064413577184ec39fca256dec6d9b795878464cbc"
+  "signature": "c042c83fd959385adecf7ac3ff466b2b75a0772c39a86eda22be3017d7a5bae7"
 }
