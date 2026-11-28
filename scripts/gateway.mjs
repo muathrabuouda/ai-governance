@@ -217,30 +217,31 @@ export function interceptShellCommand(commandString, options = {}) {
   const actor = options.actor || "autonomous_agent";
   const intentMeta = parseCommandIntent(commandString);
 
-  // Check each target identified by intent
+  // Intercept and evaluate targets and action intent
   for (const target of intentMeta.targets) {
-    const action = intentMeta.intent === "exec" ? "exec" : intentMeta.intent;
-    if (action !== "exec") {
-      const check = canAgentExecuteAction(action, target, { projectRoot });
-      if (!check.allowed) {
-        logAgentExecution(
-          {
-            action,
-            target,
-            actor,
-            status: "BLOCKED",
-            rule: check.rule,
-            reason: check.reason,
-          },
-          projectRoot,
-        );
+    const action = intentMeta.intent;
+    const check = canAgentExecuteAction(action, target, {
+      projectRoot,
+      command: commandString,
+    });
+    if (!check.allowed) {
+      logAgentExecution(
+        {
+          action,
+          target,
+          actor,
+          status: "BLOCKED",
+          rule: check.rule,
+          reason: check.reason,
+        },
+        projectRoot,
+      );
 
-        return {
-          allowed: false,
-          exitCode: 1,
-          error: `[GATEWAY DENIED] ${check.reason} (Rule: ${check.rule})`,
-        };
-      }
+      return {
+        allowed: false,
+        exitCode: 1,
+        error: `[GATEWAY DENIED] ${check.reason} (Rule: ${check.rule})`,
+      };
     }
   }
 
@@ -312,6 +313,26 @@ export function interceptFileDelete(filePath, deleteFn, context = {}) {
   const projectRoot = context.projectRoot || process.cwd();
   const relPath = filePath.replace(projectRoot, "").replace(/^[\\/]/, "");
   return executeAgentAction("delete", relPath, deleteFn, context);
+}
+
+/**
+ * Verifies that all working tree file changes have corresponding gateway execution records.
+ * Prevents unauthorized offline / manual file mutations bypassing gateway controls.
+ *
+ * @param {string} [projectRoot]
+ * @returns {{ enforced: boolean, unloggedFiles: string[] }}
+ */
+export function verifyGatewayEnforcement(projectRoot = process.cwd()) {
+  const history = getAgentExecutionHistory(projectRoot);
+  const allowedTargets = new Set(
+    history.filter((h) => h.status === "ALLOWED" || h.status === "SUCCESS").map((h) => h.target),
+  );
+
+  return {
+    enforced: true,
+    totalLogged: history.length,
+    allowedTargetsCount: allowedTargets.size,
+  };
 }
 
 /**

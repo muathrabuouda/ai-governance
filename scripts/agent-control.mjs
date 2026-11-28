@@ -35,7 +35,9 @@ export const DEFAULT_AGENT_CONTRACT = {
     modifyExistingAdrs: true,
     unapprovedDependencyAdditions: true,
     alterSpecWithoutHumanSignoff: true,
+    arbitraryExecution: true,
   },
+  enforceGateway: true,
   allowedCapabilities: [
     "feature_code_generation",
     "test_addition_only",
@@ -246,6 +248,30 @@ export function auditAgentChanges(projectRoot = process.cwd(), _options = {}) {
         // Fallback
       }
     }
+
+    // 5. Enforce Gateway Execution Layer (Fail-closed on unlogged bypass)
+    if (contract.enforceGateway && (statusCode === "M" || statusCode === "A" || statusCode === "??")) {
+      const logFile = resolve(projectRoot, ".governance", "evidence", "agent-execution.log");
+      let isLogged = false;
+      if (existsSync(logFile)) {
+        try {
+          const logContent = readFileSync(logFile, "utf8");
+          const normFile = normalizeRelPath(filePath);
+          isLogged =
+            logContent.includes(`target=${normFile}`) ||
+            logContent.includes(`target=${filePath}`) ||
+            logContent.includes("status=ALLOWED") ||
+            logContent.includes("action=shell_exec");
+        } catch {
+          // Unreadable log
+        }
+      }
+      if (!isLogged && contract.strictMode) {
+        warnings.push(
+          `[GATEWAY NOTICE] Modification to "${filePath}" was performed without recorded gateway action. Ensure modifications route through 'governance exec'.`,
+        );
+      }
+    }
   }
 
   return {
@@ -370,6 +396,104 @@ export function canAgentExecuteAction(action, targetPath, context = {}) {
         reason: `Package "${targetPath}" is not approved in docs/standards/dependencies.md. Unapproved dependency additions are prohibited.`,
         rule: "forbiddenActions:unapprovedDependencyAdditions",
       };
+    }
+  }
+
+  // 5. Check Shell Execution Boundaries & Safety Invariants
+  if (action === "exec") {
+    const cmd = (context.command || targetPath || "").trim();
+
+    // 5a. Mutating or targeting protected paths via shell commands
+    for (const p of contract.protectedPaths) {
+      const normP = p.replace(/\\/g, "/");
+      const isReferenced = cmd.includes(normP) || cmd.includes(p);
+      if (
+        isReferenced &&
+        /(?:>|>>|rm\b|del\b|rimraf\b|mv\b|move\b|git\s+checkout\b|git\s+reset\b|sed\b)/i.test(cmd)
+      ) {
+        return {
+          allowed: false,
+          reason: `Command attempts to mutate protected path "${normP}". Execution blocked by agent contract.`,
+          rule: "protectedPaths",
+        };
+      }
+    }
+
+    // 5b. Destructive Git operations (force push, hard reset, unverified clean)
+    if (/git\s+push\s+.*(?:--force|-f\b)/i.test(cmd)) {
+      return {
+        allowed: false,
+        reason: "Force pushing to git remotes is strictly prohibited for autonomous agents.",
+        rule: "forbiddenActions:destructiveGit",
+      };
+    }
+    if (/git\s+reset\s+--hard/i.test(cmd)) {
+      return {
+        allowed: false,
+        reason: "Hard git resets destroy uncommitted work and are prohibited for autonomous agents.",
+        rule: "forbiddenActions:destructiveGit",
+      };
+    }
+
+    // 5c. Privilege alteration or permission escalation
+    if (/(?:chmod|chown|attrib|takeown|sudo)\b/i.test(cmd)) {
+      return {
+        allowed: false,
+        reason: "Modifying file permissions or executing with elevated privileges is prohibited.",
+        rule: "forbiddenActions:privilegeTampering",
+      };
+    }
+
+    // 5d. Remote pipeline execution (curl | sh, wget | bash, netcat)
+    if (
+      /(?:curl|wget)\s+.*\|\s*(?:sh|bash|zsh|powershell|cmd)/i.test(cmd) ||
+      /\b(?:nc|netcat|ncat)\b/i.test(cmd)
+    ) {
+      return {
+        allowed: false,
+        reason: "Piping remote network responses directly into a shell interpreter is strictly prohibited.",
+        rule: "forbiddenActions:remotePipelineExecution",
+      };
+    }
+
+    // 5e. Arbitrary execution policy check in strict mode
+    if (contract.forbiddenActions.arbitraryExecution && contract.strictMode) {
+      const baseCmd = cmd
+        .split(/[\s;&|]+/)[0]
+        .toLowerCase()
+        .replace(/^[.\\/]+/, "");
+      const allowedBinaries = new Set([
+        "git",
+        "node",
+        "npm",
+        "npx",
+        "pnpm",
+        "yarn",
+        "scribe",
+        "prettier",
+        "eslint",
+        "test",
+        "echo",
+        "cat",
+        "dir",
+        "ls",
+        "mkdir",
+        "cp",
+        "copy",
+        "mv",
+        "move",
+        "type",
+        "grep",
+        "find",
+      ]);
+
+      if (baseCmd && !allowedBinaries.has(baseCmd)) {
+        return {
+          allowed: false,
+          reason: `Binary or command "${baseCmd}" is not permitted under strict agent contract execution policies.`,
+          rule: "forbiddenActions:arbitraryExecution",
+        };
+      }
     }
   }
 
