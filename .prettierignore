@@ -1,0 +1,13 @@
+# Dependencies & Build artifacts
+node_modules/
+dist/
+build/
+coverage/
+package-lock.json
+
+# Governance ledger, state, and evidence (Cryptographic hashes must not be reformatted)
+.governance/
+docs/
+
+# Golden project submodule / sandbox
+golden-project/

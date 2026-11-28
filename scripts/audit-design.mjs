@@ -113,7 +113,13 @@ export function auditFileDesign(filePath) {
     let hexMatch;
     while ((hexMatch = rawHexRegex.exec(line)) !== null) {
       const hex = hexMatch[1].toLowerCase();
-      if (!approvedHexSet.has(hex) && hex !== "000" && hex !== "000000" && hex !== "fff" && hex !== "ffffff") {
+      if (
+        !approvedHexSet.has(hex) &&
+        hex !== "000" &&
+        hex !== "000000" &&
+        hex !== "fff" &&
+        hex !== "ffffff"
+      ) {
         violations.push({
           line: lineNum,
           message: `Token Bypass: Raw arbitrary color hex "#${hexMatch[1]}" used without design token abstraction.`,
@@ -212,7 +218,9 @@ export function runDesignAudit(targetDir = process.cwd()) {
 
   console.log("\n------------------------------------------------");
   if (errorCount === 0) {
-    console.log(`Design System Audit Passed: Checked ${files.length} files. (${warningCount} warnings, 0 errors)`);
+    console.log(
+      `Design System Audit Passed: Checked ${files.length} files. (${warningCount} warnings, 0 errors)`,
+    );
     return { passed: true, violationsCount: errorCount };
   } else {
     console.error(

@@ -48,7 +48,10 @@ const RULES = [
   ["GitHub token", /gh[pousr]_[A-Za-z0-9]{36,}/],
   ["GitLab personal access token", /glpat-[A-Za-z0-9_-]{20,}/],
   ["Slack token", /xox[baprs]-[0-9]{10,}-[A-Za-z0-9]+/],
-  ["Generic credential assignment", /(password|passwd|secret|api_?key|auth_token)\s*[:=]\s*["'][^"'\s]{8,}["']/i],
+  [
+    "Generic credential assignment",
+    /(password|passwd|secret|api_?key|auth_token)\s*[:=]\s*["'][^"'\s]{8,}["']/i,
+  ],
   ["Database connection URI with credentials", /(postgres|mysql|mongodb|redis):\/\/[^:\s]+:[^@\s]+@/i],
 ];
 
@@ -61,7 +64,11 @@ function* files(dir) {
       if (SKIP.has(name)) continue;
       const p = join(dir, name);
       if (statSync(p).isDirectory()) yield* files(p);
-      else if (/\.(ts|js|mjs|json|md|ya?ml|env|sh|txt|php|blade\.php|vue|kt|gradle)$/.test(name) || name.startsWith(".env")) yield p;
+      else if (
+        /\.(ts|js|mjs|json|md|ya?ml|env|sh|txt|php|blade\.php|vue|kt|gradle)$/.test(name) ||
+        name.startsWith(".env")
+      )
+        yield p;
     }
   } catch {
     // Directory might be inaccessible

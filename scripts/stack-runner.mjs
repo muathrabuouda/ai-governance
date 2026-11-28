@@ -66,8 +66,8 @@ export function detectStacks(projectRoot = process.cwd()) {
           ? existsSync(pestBin)
             ? { cmd: pestBin, args: [] }
             : existsSync(phpunitBin)
-            ? { cmd: phpunitBin, args: [] }
-            : undefined
+              ? { cmd: phpunitBin, args: [] }
+              : undefined
           : undefined,
         lintCmd: hasVendor && existsSync(phpstanBin) ? { cmd: phpstanBin, args: ["analyse"] } : undefined,
       });
@@ -94,8 +94,8 @@ export function detectStacks(projectRoot = process.cwd()) {
         lintCmd: scripts.lint
           ? { cmd: "npm", args: ["run", "lint"] }
           : scripts.typecheck
-          ? { cmd: "npm", args: ["run", "typecheck"] }
-          : undefined,
+            ? { cmd: "npm", args: ["run", "typecheck"] }
+            : undefined,
       });
     } catch {
       // Fallback on parse error
@@ -176,8 +176,8 @@ export function detectStacks(projectRoot = process.cwd()) {
       missingDepsMessage: !pytestCmd
         ? "pytest not found in virtualenv or PATH (run pip install pytest)"
         : !hasVenv
-        ? "virtualenv not detected (.venv / venv directory missing)"
-        : undefined,
+          ? "virtualenv not detected (.venv / venv directory missing)"
+          : undefined,
       testCmd: pytestCmd ? { cmd: pytestCmd, args: [] } : undefined,
       lintCmd: mypyCmd ? { cmd: mypyCmd, args: ["."] } : undefined,
     });

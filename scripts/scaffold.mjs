@@ -6,7 +6,7 @@
  * @license MIT
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, copyFileSync, chmodSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, chmodSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,8 +43,14 @@ export function getDocsDir(customDir) {
  * @param {string} [targetDocsDir]
  * @param {boolean} [overwrite=false]
  */
-export function initDocs(projectName = "Governance Project", targetDocsDir = getDocsDir(), overwrite = false) {
-  console.log(`\nInitializing Governance 3-pillar methodology documentation for "${projectName}"...\nTarget: ${targetDocsDir}\n`);
+export function initDocs(
+  projectName = "Governance Project",
+  targetDocsDir = getDocsDir(),
+  overwrite = false,
+) {
+  console.log(
+    `\nInitializing Governance 3-pillar methodology documentation for "${projectName}"...\nTarget: ${targetDocsDir}\n`,
+  );
 
   const foundationTarget = resolve(targetDocsDir, "foundation");
   const lifecycleTarget = resolve(targetDocsDir, "lifecycle");
@@ -156,7 +162,9 @@ export function initDocs(projectName = "Governance Project", targetDocsDir = get
     }
   }
 
-  console.log(`\n[PASS] Governance 3-pillar documentation suite initialized: ${createdCount} written, ${skippedCount} preserved.`);
+  console.log(
+    `\n[PASS] Governance 3-pillar documentation suite initialized: ${createdCount} written, ${skippedCount} preserved.`,
+  );
 }
 
 /**
@@ -271,7 +279,9 @@ export function listAdrs(targetDocsDir = getDocsDir()) {
     return;
   }
 
-  const files = readdirSync(adrDir).filter((f) => f.endsWith(".md")).sort();
+  const files = readdirSync(adrDir)
+    .filter((f) => f.endsWith(".md"))
+    .sort();
   if (files.length === 0) {
     console.log(`\nNo Architecture Decision Records found in ${adrDir}.`);
     console.log(`Run "governance new:adr <title>" to create your first decision.`);
@@ -303,7 +313,6 @@ export function getStatus(targetDocsDir = getDocsDir()) {
   console.log(`   Target Workspace: ${projectRoot}`);
   console.log(`================================================================\n`);
 
-  const specPath = resolve(targetDocsDir, "foundation", "02-spec.md");
   const progressPath = resolve(targetDocsDir, "lifecycle", "progress.md");
   const adrDir = resolve(targetDocsDir, "foundation", "adr");
 
@@ -329,7 +338,9 @@ export function getStatus(targetDocsDir = getDocsDir()) {
     const progressContent = readFileSync(progressPath, "utf8");
     const completed = (progressContent.match(/- \[[xX]\]/g) || []).length;
     const pending = (progressContent.match(/- \[ \]/g) || []).length;
-    console.log(`[INFO] Stories Lifecycle: ${completed} Completed | ${pending} Pending | Total: ${completed + pending}`);
+    console.log(
+      `[INFO] Stories Lifecycle: ${completed} Completed | ${pending} Pending | Total: ${completed + pending}`,
+    );
   }
 
   // Check Agent Rules
@@ -355,11 +366,7 @@ export function getStatus(targetDocsDir = getDocsDir()) {
  * @param {string} [title]
  * @param {string} [targetDocsDir]
  */
-export function addThreatModel(
-  storyNumber,
-  title = "Feature Security",
-  targetDocsDir = getDocsDir(),
-) {
+export function addThreatModel(storyNumber, title = "Feature Security", targetDocsDir = getDocsDir()) {
   const threatDir = resolve(targetDocsDir, "lifecycle", "threat-model");
   if (!existsSync(threatDir)) mkdirSync(threatDir, { recursive: true });
 
@@ -459,7 +466,9 @@ ${endTag}`;
   safeMergeFile(resolve(githubDir, "copilot-instructions.md"));
   console.log(`  [PASS] [MANAGED] .github/copilot-instructions.md`);
 
-  console.log(`\n[PASS] Agent governance rules successfully integrated without overwriting custom instructions.\n`);
+  console.log(
+    `\n[PASS] Agent governance rules successfully integrated without overwriting custom instructions.\n`,
+  );
 }
 
 /**
@@ -531,15 +540,16 @@ export function installCiWorkflow(projectRoot = process.cwd(), force = false) {
   const workflowPath = resolve(workflowsDir, "governance-gate.yml");
 
   if (existsSync(workflowPath) && !force) {
-    console.log(`[WARN] CI workflow already exists at .github/workflows/governance-gate.yml. Use --force to overwrite.`);
+    console.log(
+      `[WARN] CI workflow already exists at .github/workflows/governance-gate.yml. Use --force to overwrite.`,
+    );
     return false;
   }
 
   const hasComposer = existsSync(resolve(projectRoot, "composer.json"));
   const hasPackageJson = existsSync(resolve(projectRoot, "package.json"));
   const hasGradle =
-    existsSync(resolve(projectRoot, "build.gradle")) ||
-    existsSync(resolve(projectRoot, "build.gradle.kts"));
+    existsSync(resolve(projectRoot, "build.gradle")) || existsSync(resolve(projectRoot, "build.gradle.kts"));
   const hasPython =
     existsSync(resolve(projectRoot, "requirements.txt")) ||
     existsSync(resolve(projectRoot, "pyproject.toml"));
